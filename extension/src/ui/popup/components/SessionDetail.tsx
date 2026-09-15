@@ -1,16 +1,22 @@
 import { useState } from "preact/hooks";
+import type { ComponentChildren } from "preact";
 import { motion } from "framer-motion";
 import type { NoteSession } from "@/types/session";
 import { deleteSession, regenerateNote } from "@/ui/shared/messaging";
+import { downloadText, transcriptToText } from "@/ui/shared/download";
 
 interface Props {
   session: NoteSession;
   onBack: () => void;
   onDeleted: () => void;
+  standalone?: boolean;
 }
 
-export function SessionDetail({ session, onBack, onDeleted }: Props) {
+type Tab = "note" | "transcript";
+
+export function SessionDetail({ session, onBack, onDeleted, standalone = false }: Props) {
   const [regenerating, setRegenerating] = useState(false);
+  const [tab, setTab] = useState<Tab>(session.generatedNote ? "note" : "transcript");
 
   async function handleRegenerate() {
     setRegenerating(true);
@@ -26,16 +32,45 @@ export function SessionDetail({ session, onBack, onDeleted }: Props) {
     onDeleted();
   }
 
+  function handleOpenFullView() {
+    chrome.tabs.create({
+      url: chrome.runtime.getURL(`src/ui/popup/index.html?sessionId=${session.id}&view=tab`),
+    });
+  }
+
+  function handleExportTranscript() {
+    downloadText(`${sanitizeFilename(session.title)}-transcript.txt`, transcriptToText(session));
+  }
+
+  function handleExportNote() {
+    if (!session.generatedNote) return;
+    downloadText(`${sanitizeFilename(session.title)}-note.md`, session.generatedNote.markdown, "text/markdown");
+  }
+
+  const bodyMaxHeight = standalone ? "" : "max-h-96";
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 12 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.18 }}
-      className="max-h-96 overflow-y-auto px-4 py-3"
+      className={`${bodyMaxHeight} overflow-y-auto px-4 py-3`}
     >
-      <button onClick={onBack} className="mb-2 text-xs font-medium text-indigo-400 hover:text-indigo-300">
-        ← Back
-      </button>
+      <div className="mb-2 flex items-center justify-between">
+        <button onClick={onBack} className="text-xs font-medium text-indigo-400 hover:text-indigo-300">
+          ← Back
+        </button>
+        {!standalone && (
+          <button
+            onClick={handleOpenFullView}
+            className="text-[11px] font-medium text-neutral-500 transition-colors hover:text-indigo-400"
+            title="Open this session in a full browser tab"
+          >
+            Open full view ↗
+          </button>
+        )}
+      </div>
+
       <h2 className="text-sm font-semibold text-neutral-100">
         {session.title || "Untitled session"}
       </h2>
@@ -56,17 +91,59 @@ export function SessionDetail({ session, onBack, onDeleted }: Props) {
         </div>
       )}
 
-      <pre className="whitespace-pre-wrap break-words rounded-lg border border-white/5 bg-white/[0.03] p-3 text-xs leading-relaxed text-neutral-300">
-        {session.generatedNote?.markdown ?? "Note not generated yet."}
-      </pre>
+      <div className="mb-2 flex gap-1 rounded-lg border border-white/5 bg-white/[0.02] p-1">
+        <TabButton active={tab === "note"} onClick={() => setTab("note")}>
+          Note
+        </TabButton>
+        <TabButton active={tab === "transcript"} onClick={() => setTab("transcript")}>
+          Transcript ({session.transcript.length})
+        </TabButton>
+      </div>
 
-      <div className="mt-3 flex gap-2">
+      {tab === "note" ? (
+        <pre className="whitespace-pre-wrap break-words rounded-lg border border-white/5 bg-white/[0.03] p-3 text-xs leading-relaxed text-neutral-300">
+          {session.generatedNote?.markdown ?? "Note not generated yet — check the Transcript tab, or click Regenerate note below."}
+        </pre>
+      ) : (
+        <div className="rounded-lg border border-white/5 bg-white/[0.03] p-3 text-xs leading-relaxed text-neutral-300">
+          {session.transcript.length === 0 ? (
+            <p className="text-neutral-500">No transcript captured yet.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {session.transcript.map((entry, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="shrink-0 tabular-nums text-neutral-600">
+                    {new Date(entry.timestampMs).toLocaleTimeString()}
+                  </span>
+                  <span>{entry.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
         <button
           onClick={handleRegenerate}
           disabled={regenerating}
           className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
         >
           {regenerating ? "Generating…" : "Regenerate note"}
+        </button>
+        <button
+          onClick={handleExportTranscript}
+          disabled={session.transcript.length === 0}
+          className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+        >
+          Export transcript
+        </button>
+        <button
+          onClick={handleExportNote}
+          disabled={!session.generatedNote}
+          className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+        >
+          Export note
         </button>
         <button
           onClick={handleDelete}
@@ -77,4 +154,21 @@ export function SessionDetail({ session, onBack, onDeleted }: Props) {
       </div>
     </motion.div>
   );
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ComponentChildren }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+        active ? "bg-white/10 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function sanitizeFilename(name: string): string {
+  return (name || "session").replace(/[^a-z0-9\-_]+/gi, "-").slice(0, 60);
 }

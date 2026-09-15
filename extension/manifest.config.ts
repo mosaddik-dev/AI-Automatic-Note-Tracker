@@ -25,8 +25,15 @@ export default defineManifest({
     "offscreen",
     "activeTab",
     "scripting",
+    "downloads",
   ],
   host_permissions: ["<all_urls>"],
+  // Required for the sherpa-onnx WASM ASR model: Chrome's default MV3
+  // extension-page CSP (script-src 'self'; object-src 'self') does not
+  // permit WebAssembly.instantiate, which needs 'wasm-unsafe-eval'.
+  content_security_policy: {
+    extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+  },
   content_scripts: [
     {
       matches: ["<all_urls>"],

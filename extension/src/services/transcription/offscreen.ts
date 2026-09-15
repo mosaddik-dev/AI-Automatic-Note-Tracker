@@ -70,10 +70,18 @@ async function startCapture(tabId: number, streamId: string, sessionId: string):
     void pipeline.pushChunk(chunk);
   };
 
+  // Capturing a tab via chrome.tabCapture reroutes ALL of that tab's audio
+  // into this MediaStream — it stops playing through the tab's own output
+  // entirely. If we don't explicitly reconnect it to this AudioContext's
+  // destination, the tab goes silent for the user for the whole recording.
+  source.connect(audioContext.destination);
+
+  // Separately, feed the same source into the analysis path. A
+  // ScriptProcessorNode only fires onaudioprocess while connected (directly
+  // or indirectly) to a destination, but we don't want its pass-through
+  // output audible (that would double up the audio we already play above),
+  // so it terminates in a silent (gain=0) sink instead.
   source.connect(processor);
-  // A ScriptProcessorNode only fires when connected to a destination.
-  // We don't want to hear the tab's own audio played back twice, so route
-  // through a silent gain node instead of audioContext.destination.
   const silentSink = audioContext.createGain();
   silentSink.gain.value = 0;
   processor.connect(silentSink);

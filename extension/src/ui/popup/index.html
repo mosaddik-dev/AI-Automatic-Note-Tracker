@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AI Note Tracker</title>
     <style>
+      /* Default (real toolbar popup) sizing; App.tsx removes the fixed width
+         when this page is opened standalone in a normal tab (?view=tab). */
       html, body { margin: 0; padding: 0; width: 400px; background: #0a0a0a; }
+      body.standalone, html:has(body.standalone) { width: auto; min-height: 100vh; }
     </style>
   </head>
   <body>

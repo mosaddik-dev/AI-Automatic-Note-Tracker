@@ -274,7 +274,36 @@ since none has been entered anywhere).
 16. Dashboard/session history — **done** (popup UI)
 17. Settings — **done** (options page: provider keys/priority, screenshot sensitivity)
 18. Testing — **not started** (no automated tests exist yet)
-19. Full end-to-end QA — **not started** (see "NOT yet done" above — this is the immediate next step)
+19. Full end-to-end QA — **in progress**, real bugs found and fixed this pass:
+    - **Muted tab audio bug**: `offscreen.ts` routed the captured tab audio only through a silenced
+      gain node and never reconnected it to `audioContext.destination` — tab capture reroutes ALL
+      of a tab's audio into the MediaStream, so without a real playback connection the tab went
+      silent for the whole recording. Fixed: `source.connect(audioContext.destination)` added
+      alongside the existing (still-silent) analysis path.
+    - **No transcript in the real extension bug**: the manifest had no `content_security_policy`,
+      so Chrome's default MV3 extension-page CSP (`script-src 'self'; object-src 'self'`) applied,
+      which blocks `WebAssembly.instantiate` — the sherpa-onnx WASM model would silently fail to
+      load inside the actual extension (it worked in the earlier standalone verification because
+      that was a plain webpage, not an extension page, so the stricter CSP didn't apply). Fixed:
+      added `content_security_policy.extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"`
+      to `manifest.config.ts`.
+    - User-reported UX gaps, also fixed: `SessionDetail.tsx` only ever showed the generated note
+      ("Note not generated yet" with no way to see the transcript that *was* captured) — added a
+      Note/Transcript tab toggle, transcript entries list, "Export transcript" (.txt) and
+      "Export note" (.md) buttons (`src/ui/shared/download.ts`, uses `chrome.downloads.download`
+      on a Blob URL — added the `downloads` permission), and an "Open full view ↗" button that
+      opens the same popup UI in a real browser tab via `chrome.tabs.create` with
+      `?sessionId=...&view=tab` (popup's fixed 400px width becomes `min-height:100vh` full layout
+      in that mode — see `index.html`'s `body.standalone` rule and `App.tsx`'s `standalone` flag).
+    - **Environment note for whoever tests next**: the official signed Google Chrome build silently
+      ignores `--load-extension`/`--disable-extensions-except` (logged as "is not allowed in Google
+      Chrome, ignoring" — confirmed by checking `<profile>/Default/Preferences`, the extension
+      never actually loaded despite no visible error). **Brave loads it fine** with identical flags.
+      If testing headlessly again: `google-chrome` won't work for `--load-extension`, use
+      `brave-browser` (or a real manual "Load unpacked" via chrome://extensions in either browser,
+      which isn't restricted — only the CLI flag is).
+    - Still not done: a clean full manual click-through in the actual popup UI (testing so far was
+      via a real user session + one aborted automated CDP harness, notes below).
 20. Final QA agent review — not started
 21. Fix remaining issues — depends on 18-20
 22. Final verification and commits — depends on 18-21
