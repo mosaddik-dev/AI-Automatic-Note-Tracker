@@ -1,0 +1,13 @@
+# Reference source app (has its own separate git repo) — not part of this project
+stt-engine/
+
+# Playwright MCP tool artifacts
+.playwright-mcp/
+
+# Node
+node_modules/
+dist/
+*.log
+
+# OS
+.DS_Store
