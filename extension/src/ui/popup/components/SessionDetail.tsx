@@ -215,12 +215,17 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
             <ul className="space-y-1.5">
               {activeTranscript.map((entry, i) => (
                 <li key={i} id={`transcript-entry-${i}`}>
-                  <div className="flex gap-2">
-                    <span className="shrink-0 tabular-nums text-neutral-600">
-                      {usingYouTube ? formatElapsed(entry.timestampMs) : new Date(entry.timestampMs).toLocaleTimeString()}
-                    </span>
-                    <span>{entry.text}</span>
-                  </div>
+                  {/* Blank entries can exist in older sessions recorded before a fix to the
+                      silence-endpoint handling; hidden here rather than filtered out of the
+                      array, since screenshot associations reference these exact indices. */}
+                  {entry.text.trim() && (
+                    <div className="flex gap-2">
+                      <span className="shrink-0 tabular-nums text-neutral-600">
+                        {usingYouTube ? formatElapsed(entry.timestampMs) : new Date(entry.timestampMs).toLocaleTimeString()}
+                      </span>
+                      <span>{entry.text}</span>
+                    </div>
+                  )}
                   {!usingYouTube &&
                     screenshotsByTranscriptIndex(session.screenshots, i).map((shot) => (
                       <img

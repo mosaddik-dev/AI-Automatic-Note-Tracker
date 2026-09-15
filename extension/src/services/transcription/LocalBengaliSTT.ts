@@ -91,13 +91,22 @@ export class LocalBengaliSTT implements TranscriptionProvider {
 
     const isEndpoint = this.recognizer.isEndpoint(this.stream);
     const result = this.recognizer.getResult(this.stream);
-    const text: string = result?.text ?? "";
+    const text: string = (result?.text ?? "").trim();
 
     if (isEndpoint) {
+      // Always reset on endpoint, even with no text — this is what happens
+      // continuously during silence (e.g. a paused video): the endpoint
+      // rules (trailing-silence duration) keep firing on nothing but
+      // silence, and without a reset the recognizer's internal state would
+      // never clear between (non-existent) utterances.
       this.recognizer.reset(this.stream);
     }
 
-    if (!text && !isEndpoint) {
+    // No text means nothing was actually said in this chunk — including a
+    // silence-triggered endpoint with an empty result, which happens
+    // continuously while the tab is silent/paused. Never emit a blank
+    // segment; only real, non-empty transcribed text is reported.
+    if (!text) {
       return null;
     }
 

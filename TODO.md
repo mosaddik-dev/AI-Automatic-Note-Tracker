@@ -254,6 +254,31 @@ a screenshot gets captured on a visual change (while the tab stays focused), sto
 auto-generates a note (or fails clearly if no real AI provider API key is configured yet — expected,
 since none has been entered anywhere).
 
+## Bug: infinite blank transcript entries when audio is paused/silent
+
+User report: "I paused the video, but the transcript is still going on and on. And it's going
+blank infinitely." Real bug, confirmed and fixed:
+
+- `LocalBengaliSTT.transcribe()` (`src/services/transcription/LocalBengaliSTT.ts`) had
+  `if (!text && !isEndpoint) return null;` — when the recognizer hits a silence-triggered
+  "endpoint" (its trailing-silence rule, ~2.4s) with no actual speech recognized, `isEndpoint` is
+  true but `text` is empty, so this condition was FALSE and it fell through to return a real
+  segment with `text: ""`. A paused (or otherwise silent) tab produces continuous silence, so the
+  endpoint rule kept re-firing every ~2.4s forever, emitting an empty-text segment each time —
+  exactly the reported symptom. **Fix**: changed to `if (!text) return null;` — no text means
+  nothing was said, full stop, regardless of endpoint status; the endpoint-triggered
+  `recognizer.reset()` still happens either way (needed to clear internal state).
+- Defense in depth: `background/index.ts`'s `"transcript-segment"` handler now also checks
+  `message.segment.text.trim().length > 0` before calling `appendTranscriptEntry` — never persists
+  a blank entry regardless of what any transcription provider sends.
+- Cleanup for sessions recorded before this fix (which may already have blank entries baked into
+  `session.transcript`): rather than mutating stored data, blank entries are hidden at display time
+  (`SessionDetail.tsx`'s transcript render skips rendering the text line when empty, but keeps the
+  `<li>` anchor since screenshot associations reference these exact array indices) and filtered out
+  of `transcriptToText()` (`src/ui/shared/download.ts`, used by both Copy and Export transcript).
+  Not filtered from what's sent to the AI for note generation — harmless there (empty strings just
+  add nothing when joined), not worth the complexity of also touching chunking's index math.
+
 ## YouTube built-in transcript (user request, "side by side" option chosen)
 
 - `src/background/youtubeTranscript.ts`: `isYouTubeWatchUrl()` detects a YouTube watch-page tab;

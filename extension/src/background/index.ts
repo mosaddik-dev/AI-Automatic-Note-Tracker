@@ -260,13 +260,18 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
     }
 
     case "transcript-segment":
-      void appendTranscriptEntry(message.sessionId, {
-        text: message.segment.text,
-        timestampMs: message.segment.timestampMs,
-      }).then((session) => {
-        const update: RuntimeMessage = { type: "session-updated", session };
-        void chrome.runtime.sendMessage(update).catch(() => undefined);
-      });
+      // Defense in depth: never persist a blank entry, regardless of what
+      // the transcription provider sends (e.g. a silence-triggered endpoint
+      // with no actual speech, which happens continuously while paused).
+      if (message.segment.text.trim().length > 0) {
+        void appendTranscriptEntry(message.sessionId, {
+          text: message.segment.text,
+          timestampMs: message.segment.timestampMs,
+        }).then((session) => {
+          const update: RuntimeMessage = { type: "session-updated", session };
+          void chrome.runtime.sendMessage(update).catch(() => undefined);
+        });
+      }
       return false;
 
     case "list-sessions":

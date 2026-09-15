@@ -20,9 +20,11 @@ export function transcriptToText(
   entries: { text: string; timestampMs: number }[],
   relative = false,
 ): string {
-  const lines = entries.map((entry) => {
-    const label = relative ? formatElapsed(entry.timestampMs) : new Date(entry.timestampMs).toLocaleTimeString();
-    return `[${label}] ${entry.text}`;
-  });
+  const lines = entries
+    .filter((entry) => entry.text.trim().length > 0)
+    .map((entry) => {
+      const label = relative ? formatElapsed(entry.timestampMs) : new Date(entry.timestampMs).toLocaleTimeString();
+      return `[${label}] ${entry.text}`;
+    });
   return `${title}\n\n${lines.join("\n")}`;
 }
