@@ -1,7 +1,7 @@
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import { motion } from "framer-motion";
-import type { NoteSession } from "@/types/session";
+import type { GenerationLogEntry, NoteSession } from "@/types/session";
 import { deleteSession, regenerateNote } from "@/ui/shared/messaging";
 import { downloadText, transcriptToText } from "@/ui/shared/download";
 
@@ -12,14 +12,39 @@ interface Props {
   standalone?: boolean;
 }
 
-type Tab = "note" | "transcript";
+type Tab = "note" | "transcript" | "logs";
 
 export function SessionDetail({ session, onBack, onDeleted, standalone = false }: Props) {
   const [regenerating, setRegenerating] = useState(false);
   const [tab, setTab] = useState<Tab>(session.generatedNote ? "note" : "transcript");
+  const [liveLogs, setLiveLogs] = useState<GenerationLogEntry[]>(session.generationLogs ?? []);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Stream "ai-log" events for this session while it's regenerating; the
+  // final log set also arrives persisted on session.generationLogs once the
+  // background broadcasts session-updated on completion.
+  useEffect(() => {
+    setLiveLogs(session.generationLogs ?? []);
+    const listener = (message: any) => {
+      if (message?.type === "ai-log" && message.sessionId === session.id) {
+        setLiveLogs((prev) => [...prev, message.entry as GenerationLogEntry]);
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.id]);
+
+  useEffect(() => {
+    if (tab === "logs") {
+      logsEndRef.current?.scrollIntoView({ block: "end" });
+    }
+  }, [liveLogs, tab]);
 
   async function handleRegenerate() {
     setRegenerating(true);
+    setLiveLogs([]);
+    setTab("logs");
     try {
       await regenerateNote(session.id);
     } finally {
@@ -98,13 +123,18 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
         <TabButton active={tab === "transcript"} onClick={() => setTab("transcript")}>
           Transcript ({session.transcript.length})
         </TabButton>
+        <TabButton active={tab === "logs"} onClick={() => setTab("logs")}>
+          Logs {liveLogs.length > 0 ? `(${liveLogs.length})` : ""}
+        </TabButton>
       </div>
 
-      {tab === "note" ? (
+      {tab === "note" && (
         <pre className="whitespace-pre-wrap break-words rounded-lg border border-white/5 bg-white/[0.03] p-3 text-xs leading-relaxed text-neutral-300">
           {session.generatedNote?.markdown ?? "Note not generated yet — check the Transcript tab, or click Regenerate note below."}
         </pre>
-      ) : (
+      )}
+
+      {tab === "transcript" && (
         <div className="rounded-lg border border-white/5 bg-white/[0.03] p-3 text-xs leading-relaxed text-neutral-300">
           {session.transcript.length === 0 ? (
             <p className="text-neutral-500">No transcript captured yet.</p>
@@ -119,6 +149,29 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      )}
+
+      {tab === "logs" && (
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-white/5 bg-black/40 p-3 font-mono text-[11px] leading-relaxed">
+          {liveLogs.length === 0 ? (
+            <p className="text-neutral-600">
+              No generation logs yet — click "Regenerate note" to see live AI provider activity here
+              (which provider is called, responses, fallbacks on failure).
+            </p>
+          ) : (
+            <>
+              {liveLogs.map((entry, i) => (
+                <div key={i} className={`flex gap-2 ${logLevelClass(entry.level)}`}>
+                  <span className="shrink-0 tabular-nums text-neutral-600">
+                    {new Date(entry.timestamp).toLocaleTimeString()}
+                  </span>
+                  <span className="break-words">{entry.message}</span>
+                </div>
+              ))}
+              <div ref={logsEndRef} />
+            </>
           )}
         </div>
       )}
@@ -171,4 +224,15 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 function sanitizeFilename(name: string): string {
   return (name || "session").replace(/[^a-z0-9\-_]+/gi, "-").slice(0, 60);
+}
+
+function logLevelClass(level: GenerationLogEntry["level"]): string {
+  switch (level) {
+    case "error":
+      return "text-red-400";
+    case "warn":
+      return "text-amber-400";
+    default:
+      return "text-neutral-300";
+  }
 }

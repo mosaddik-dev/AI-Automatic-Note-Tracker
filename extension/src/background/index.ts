@@ -10,6 +10,7 @@ import {
   saveSession,
 } from "../services/storage";
 import { generateNoteWithFallback } from "../services/ai";
+import { createCollectingLogger } from "../services/ai/logger";
 import {
   DEFAULT_SCREENSHOT_SETTINGS,
   STORAGE_KEY_AI_PROVIDER_CONFIGS,
@@ -18,6 +19,7 @@ import {
 } from "../ui/shared/storageKeys";
 import { associateScreenshotWithTranscript, IntelligentScreenshotCapture } from "../services/screenshot";
 import type { AIProviderConfig } from "../types/ai";
+import type { GenerationLogEntry } from "../types/session";
 
 interface ActiveRecording {
   sessionId: string;
@@ -101,7 +103,15 @@ async function regenerateNote(sessionId: string): Promise<void> {
   const session = await getSession(sessionId);
   if (!session) return;
 
+  const logs: GenerationLogEntry[] = [];
+  const logger = createCollectingLogger((entry) => {
+    logs.push(entry);
+    const logMessage: RuntimeMessage = { type: "ai-log", sessionId, entry };
+    void chrome.runtime.sendMessage(logMessage).catch(() => undefined);
+  });
+
   session.status = "processing";
+  session.generationLogs = logs;
   session.updatedAt = Date.now();
   await saveSession(session);
   const processingUpdate: RuntimeMessage = { type: "session-updated", session };
@@ -117,6 +127,7 @@ async function regenerateNote(sessionId: string): Promise<void> {
         sessionTitle: session.title,
       },
       configs,
+      logger,
     );
     session.generatedNote = {
       markdown: note.markdown,
@@ -132,6 +143,7 @@ async function regenerateNote(sessionId: string): Promise<void> {
       generatedAt: Date.now(),
     };
   }
+  session.generationLogs = logs;
   session.updatedAt = Date.now();
   await saveSession(session);
   const doneUpdate: RuntimeMessage = { type: "session-updated", session };

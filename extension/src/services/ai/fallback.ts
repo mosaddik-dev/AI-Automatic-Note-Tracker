@@ -20,18 +20,27 @@ export async function generateNoteWithFallback(
 
   const failures: string[] = [];
 
-  for (const config of ordered) {
+  logger.info(`starting note generation — provider order: ${ordered.map((c) => c.id).join(" → ")}`);
+
+  for (let i = 0; i < ordered.length; i++) {
+    const config = ordered[i];
     const provider = getProvider(config.id);
+    logger.info(`calling ${config.id} (model: ${config.model || "default"})…`);
     try {
       const note = await provider.generateNote(input, config);
-      logger.info(`note generated successfully via "${config.id}"`);
+      logger.info(`${config.id} responded successfully (${note.markdown.length} chars)`);
       return note;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.warn(`provider "${config.id}" failed, trying next: ${message}`);
+      logger.error(`${config.id} failed: ${message}`);
       failures.push(`${config.id}: ${message}`);
+      const next = ordered[i + 1];
+      if (next) {
+        logger.warn(`falling back to ${next.id}…`);
+      }
     }
   }
 
+  logger.error(`all providers failed`);
   throw new Error(`All AI providers failed:\n${failures.join("\n")}`);
 }

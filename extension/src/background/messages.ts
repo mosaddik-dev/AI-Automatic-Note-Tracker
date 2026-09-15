@@ -1,5 +1,5 @@
 import type { TranscriptSegment } from "../types/transcription";
-import type { NoteSession } from "../types/session";
+import type { GenerationLogEntry, NoteSession } from "../types/session";
 
 export type RuntimeMessage =
   | { type: "start-recording"; tabId: number }
@@ -16,7 +16,8 @@ export type RuntimeMessage =
   | { type: "delete-session"; sessionId: string }
   | { type: "capture-screenshot-request"; tabId: number }
   | { type: "capture-screenshot-response"; tabId: number; pageTitle: string; pageUrl: string }
-  | { type: "regenerate-note"; sessionId: string };
+  | { type: "regenerate-note"; sessionId: string }
+  | { type: "ai-log"; sessionId: string; entry: GenerationLogEntry };
 
 export type MessageOf<T extends RuntimeMessage["type"]> = Extract<RuntimeMessage, { type: T }>;
 

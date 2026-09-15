@@ -3,6 +3,12 @@ export interface TranscriptEntry {
   timestampMs: number;
 }
 
+export interface GenerationLogEntry {
+  timestamp: number;
+  level: "info" | "warn" | "error";
+  message: string;
+}
+
 export interface ScreenshotEntry {
   id: string;
   dataUrl: string;
@@ -23,5 +29,6 @@ export interface NoteSession {
     providerId: string;
     generatedAt: number;
   };
+  generationLogs?: GenerationLogEntry[];
   status: "recording" | "stopped" | "processing" | "completed";
 }
