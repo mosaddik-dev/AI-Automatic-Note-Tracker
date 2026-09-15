@@ -341,7 +341,51 @@ since none has been entered anywhere).
     "technical topic" detection exists (only generic pixel-diff) — real scene classification was
     judged out of scope.
 15. Screenshot storage/association — **done**
-16. Dashboard/session history — **done** (popup UI)
+16. Dashboard/session history — **done** (popup UI). Extended per user feedback ("note has become
+    gibberish... no screenshot attached... language very disgusting... should be reviewed by
+    another AI... written in beautiful human Bengali"):
+    - **Root cause 1**: chunked long-transcript generation (added earlier) can send different
+      chunks through different fallback providers depending on transient failures — producing
+      visible tone/quality inconsistency across the merged note. **Fix**: `services/ai/polish.ts` —
+      `polishNoteLanguage()` runs as a final pass after merging (for BOTH the short and
+      long/chunked path), sending the assembled note through the AI fallback chain once more with
+      a dedicated `LANGUAGE_POLISH_SYSTEM_PROMPT` (`prompts.ts`) instructing it to rewrite for
+      natural, correct, human-sounding prose in the same language, fix inconsistency at part
+      boundaries, preserve every fact/heading/bullet/bold exactly, and never mention AI/reviewing.
+      Falls back to the un-polished note (not an error) if every provider fails on this pass.
+    - **Root cause 2**: screenshots were only ever described to the AI in text ("Screenshot 3
+      captured at...") with no reliable mechanism to actually embed the real image — the AI might
+      not even echo that exact phrase back. **Fix**: switched to an exact machine-parseable
+      placeholder the AI is instructed to emit verbatim: `[[screenshot:N]]` (N = 1-based, matching
+      `session.screenshots` order). After the polish pass, `services/ai/screenshotPlaceholders.ts`
+      (`resolveScreenshotPlaceholders`) swaps every placeholder for a real
+      `![Screenshot N](dataUrl)` Markdown image using the actual captured screenshot — done in
+      `background/index.ts`'s `regenerateNote()`, the only place with access to the real image data.
+      Unresolvable placeholders (AI hallucinating a wrong number) are dropped, not left as visible
+      raw markup.
+    - Necessary refactor to support the polish pass: every `AIProvider` now also implements a raw
+      `complete(systemPrompt, userPrompt, config): Promise<string>` (system+user prompt in, plain
+      text out) alongside `generateNote()` — `generateNote()` is now built on top of `complete()`,
+      not a separate code path. `services/ai/providers/openAiCompatible.ts` split into
+      `chatCompletionOpenAiCompatible` (raw) + `generateNoteViaOpenAiCompatibleChat` (note-shaped
+      wrapper); `GoogleProvider.ts` similarly split.
+    - Since the note view now actually contains real Markdown images (and to make headings/bold/
+      lists look like an actual note instead of raw `**`/`#` symbols), the Note tab now renders
+      through a small hand-rolled Markdown-to-Preact-elements renderer
+      (`src/ui/shared/renderNoteMarkdown.tsx`) instead of a plain `<pre>` text block — built as real
+      elements (not `dangerouslySetInnerHTML`) so there's no HTML-injection surface from AI output,
+      consistent with the existing pragmatic-parser style in `services/ai/notion.ts`.
+    - **Not yet verified against a real live generation** — the polish pass and placeholder
+      resolution are new and untested against actual API responses; next session should regenerate
+      a note (ideally one with screenshots) and confirm: no `[[screenshot:N]]` markup ever leaks
+      into the visible note, images actually render, and the prose genuinely reads more natural
+      after polish (a subjective judgment — worth the user's own read to confirm quality improved).
+    - Added a **Timeline tab** (`src/ui/popup/components/SessionTimeline.tsx`) per user request — a
+      horizontal scrubber-style view spanning the recording's start→end, with screenshot thumbnails
+      plotted at their real captured position and a tick per transcript entry; clicking a marker
+      jumps to that point in the Transcript tab (scrolls to it — there's no literal video element
+      the extension controls to seek within, so "jump" means scroll-to-position in the transcript,
+      not video playback).
 17. Settings — **done** (options page: provider keys/priority, screenshot sensitivity). Extended
     per user request: model fields are now labeled dropdowns ("Fast"/"Normal"/"Best"/"Complex task"
     tags) with a "Custom…" free-text fallback, defined in `src/ui/shared/modelOptions.ts`

@@ -9,7 +9,7 @@ import {
   listSessions,
   saveSession,
 } from "../services/storage";
-import { generateChunkedNote, type ScreenshotDescription } from "../services/ai";
+import { generateChunkedNote, resolveScreenshotPlaceholders, type ScreenshotDescription } from "../services/ai";
 import { createCollectingLogger } from "../services/ai/logger";
 import {
   DEFAULT_SCREENSHOT_SETTINGS,
@@ -66,10 +66,10 @@ async function captureScreenshotTick(tabId: number, sessionId: string, capture: 
 
 /**
  * There's no real image captioning here (no vision-model call per
- * screenshot) — only a timing + nearby-transcript-text description, which is
- * enough for the AI to say "(see screenshot: ...)" at roughly the right
- * point in the notes per NOTE_SYSTEM_PROMPT. Real content description (what
- * the screenshot actually shows) would need a captioning API call per image.
+ * screenshot) — only a timing + nearby-transcript-text description. The AI
+ * is instructed (NOTE_SYSTEM_PROMPT) to mark where a screenshot belongs with
+ * an exact "[[screenshot:N]]" placeholder using this same 1-based `number`,
+ * which resolveScreenshotPlaceholders() below then swaps for the real image.
  */
 function buildScreenshotDescriptions(session: {
   screenshots: NoteSession["screenshots"];
@@ -80,9 +80,9 @@ function buildScreenshotDescriptions(session: {
       shot.associatedTranscriptIndex != null ? session.transcript[shot.associatedTranscriptIndex]?.text : undefined;
     const timeLabel = new Date(shot.timestampMs).toLocaleTimeString();
     const description = nearbyText
-      ? `Screenshot ${i + 1} (captured at ${timeLabel}, while the transcript said: "${nearbyText}")`
-      : `Screenshot ${i + 1} (captured at ${timeLabel})`;
-    return { associatedTranscriptIndex: shot.associatedTranscriptIndex, description };
+      ? `captured at ${timeLabel}, while the transcript said: "${nearbyText}"`
+      : `captured at ${timeLabel}`;
+    return { number: i + 1, associatedTranscriptIndex: shot.associatedTranscriptIndex, description };
   });
 }
 
@@ -155,8 +155,12 @@ async function regenerateNote(sessionId: string): Promise<void> {
       configs,
       logger,
     );
+    const finalMarkdown = resolveScreenshotPlaceholders(
+      note.markdown,
+      session.screenshots.map((shot, i) => ({ number: i + 1, dataUrl: shot.dataUrl })),
+    );
     session.generatedNote = {
-      markdown: note.markdown,
+      markdown: finalMarkdown,
       providerId: note.providerId,
       generatedAt: Date.now(),
     };

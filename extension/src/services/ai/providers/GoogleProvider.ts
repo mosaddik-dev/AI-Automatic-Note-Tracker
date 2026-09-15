@@ -20,14 +20,14 @@ import { markdownToNotionBlocks } from "../notion";
 export class GoogleProvider implements AIProvider {
   readonly id = "google" as const;
 
-  async generateNote(input: NoteGenerationInput, config: AIProviderConfig): Promise<GeneratedNote> {
+  async complete(systemPrompt: string, userPrompt: string, config: AIProviderConfig): Promise<string> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       config.model,
     )}:generateContent?key=${encodeURIComponent(config.apiKey)}`;
 
     const body = {
-      systemInstruction: { parts: [{ text: NOTE_SYSTEM_PROMPT }] },
-      contents: [{ role: "user", parts: [{ text: buildUserPrompt(input) }] }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       generationConfig: { temperature: 0.4 },
     };
 
@@ -43,10 +43,15 @@ export class GoogleProvider implements AIProvider {
     }
 
     const json = await res.json();
-    const markdown: string | undefined = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!markdown) {
+    const text: string | undefined = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
       throw new Error("Google Gemini response did not contain generated text");
     }
+    return text;
+  }
+
+  async generateNote(input: NoteGenerationInput, config: AIProviderConfig): Promise<GeneratedNote> {
+    const markdown = await this.complete(NOTE_SYSTEM_PROMPT, buildUserPrompt(input), config);
 
     const title = extractTitle(markdown, input.sessionTitle ?? "Untitled session");
     const summary = extractSummary(markdown, "");

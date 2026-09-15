@@ -1,5 +1,12 @@
 import type { AIProvider, AIProviderConfig, GeneratedNote, NoteGenerationInput } from "@/types/ai";
-import { generateNoteViaOpenAiCompatibleChat } from "./openAiCompatible";
+import { chatCompletionOpenAiCompatible, generateNoteViaOpenAiCompatibleChat } from "./openAiCompatible";
+
+function requireEndpoint(config: AIProviderConfig): string {
+  if (!config.endpoint) {
+    throw new Error('Custom provider is enabled but has no API endpoint configured (Settings → Custom → "API endpoint")');
+  }
+  return config.endpoint;
+}
 
 /**
  * A user-supplied OpenAI-compatible `/chat/completions` endpoint (self-hosted
@@ -12,9 +19,10 @@ export class CustomOpenAiCompatibleProvider implements AIProvider {
   readonly id = "custom" as const;
 
   generateNote(input: NoteGenerationInput, config: AIProviderConfig): Promise<GeneratedNote> {
-    if (!config.endpoint) {
-      throw new Error('Custom provider is enabled but has no API endpoint configured (Settings → Custom → "API endpoint")');
-    }
-    return generateNoteViaOpenAiCompatibleChat(this.id, config.endpoint, input, config);
+    return generateNoteViaOpenAiCompatibleChat(this.id, requireEndpoint(config), input, config);
+  }
+
+  complete(systemPrompt: string, userPrompt: string, config: AIProviderConfig): Promise<string> {
+    return chatCompletionOpenAiCompatible(this.id, requireEndpoint(config), systemPrompt, userPrompt, config);
   }
 }

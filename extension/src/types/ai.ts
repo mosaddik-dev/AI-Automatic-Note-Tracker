@@ -10,10 +10,16 @@ export interface AIProviderConfig {
   endpoint?: string;
 }
 
+export interface ScreenshotPromptDescription {
+  /** 1-based number matching the session's screenshot order — used in the [[screenshot:N]] placeholder. */
+  number: number;
+  description: string;
+}
+
 export interface NoteGenerationInput {
   transcript: string;
   sessionTitle?: string;
-  screenshotDescriptions?: string[];
+  screenshotDescriptions?: ScreenshotPromptDescription[];
   /**
    * Tail end of the previous chunk's transcript, provided only when a long
    * transcript is split into multiple parts (see services/ai/chunking.ts).
@@ -36,4 +42,6 @@ export interface GeneratedNote {
 export interface AIProvider {
   id: AIProviderId;
   generateNote(input: NoteGenerationInput, config: AIProviderConfig): Promise<GeneratedNote>;
+  /** Raw system+user prompt in, plain text out — for tasks other than the structured note format (e.g. a post-generation language-polish pass). */
+  complete(systemPrompt: string, userPrompt: string, config: AIProviderConfig): Promise<string>;
 }

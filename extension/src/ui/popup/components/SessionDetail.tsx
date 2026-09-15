@@ -5,6 +5,8 @@ import type { GenerationLogEntry, NoteSession } from "@/types/session";
 import { deleteSession, regenerateNote } from "@/ui/shared/messaging";
 import { downloadText, transcriptToText } from "@/ui/shared/download";
 import { copyText } from "@/ui/shared/clipboard";
+import { renderNoteMarkdown } from "@/ui/shared/renderNoteMarkdown";
+import { SessionTimeline } from "./SessionTimeline";
 
 interface Props {
   session: NoteSession;
@@ -13,13 +15,14 @@ interface Props {
   standalone?: boolean;
 }
 
-type Tab = "note" | "transcript" | "logs";
+type Tab = "note" | "transcript" | "timeline" | "logs";
 
 export function SessionDetail({ session, onBack, onDeleted, standalone = false }: Props) {
   const [regenerating, setRegenerating] = useState(false);
   const [tab, setTab] = useState<Tab>(session.generatedNote ? "note" : "transcript");
   const [liveLogs, setLiveLogs] = useState<GenerationLogEntry[]>(session.generationLogs ?? []);
   const [copiedWhat, setCopiedWhat] = useState<"transcript" | "note" | null>(null);
+  const [pendingJumpIndex, setPendingJumpIndex] = useState<number | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Stream "ai-log" events for this session while it's regenerating; the
@@ -42,6 +45,21 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
       logsEndRef.current?.scrollIntoView({ block: "end" });
     }
   }, [liveLogs, tab]);
+
+  // Timeline markers switch to the Transcript tab then scroll to the entry
+  // once it's actually mounted (it isn't yet during the same render as the
+  // tab switch).
+  useEffect(() => {
+    if (tab === "transcript" && pendingJumpIndex != null) {
+      document.getElementById(`transcript-entry-${pendingJumpIndex}`)?.scrollIntoView({ block: "center" });
+      setPendingJumpIndex(null);
+    }
+  }, [tab, pendingJumpIndex]);
+
+  function handleJumpToEntry(entryIndex: number) {
+    setPendingJumpIndex(entryIndex);
+    setTab("transcript");
+  }
 
   async function handleRegenerate() {
     setRegenerating(true);
@@ -136,15 +154,22 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
         <TabButton active={tab === "transcript"} onClick={() => setTab("transcript")}>
           Transcript ({session.transcript.length})
         </TabButton>
+        <TabButton active={tab === "timeline"} onClick={() => setTab("timeline")}>
+          Timeline
+        </TabButton>
         <TabButton active={tab === "logs"} onClick={() => setTab("logs")}>
           Logs {liveLogs.length > 0 ? `(${liveLogs.length})` : ""}
         </TabButton>
       </div>
 
       {tab === "note" && (
-        <pre className="whitespace-pre-wrap break-words rounded-lg border border-white/5 bg-white/[0.03] p-3 text-xs leading-relaxed text-neutral-300">
-          {session.generatedNote?.markdown ?? "Note not generated yet — check the Transcript tab, or click Regenerate note below."}
-        </pre>
+        <div className="rounded-lg border border-white/5 bg-white/[0.03] p-3 text-xs leading-relaxed text-neutral-300">
+          {session.generatedNote ? (
+            renderNoteMarkdown(session.generatedNote.markdown)
+          ) : (
+            <p>Note not generated yet — check the Transcript tab, or click Regenerate note below.</p>
+          )}
+        </div>
       )}
 
       {tab === "transcript" && (
@@ -154,7 +179,7 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
           ) : (
             <ul className="space-y-1.5">
               {session.transcript.map((entry, i) => (
-                <li key={i}>
+                <li key={i} id={`transcript-entry-${i}`}>
                   <div className="flex gap-2">
                     <span className="shrink-0 tabular-nums text-neutral-600">
                       {new Date(entry.timestampMs).toLocaleTimeString()}
@@ -185,6 +210,8 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
           )}
         </div>
       )}
+
+      {tab === "timeline" && <SessionTimeline session={session} onJumpToEntry={handleJumpToEntry} />}
 
       {tab === "logs" && (
         <div className="max-h-64 overflow-y-auto rounded-lg border border-white/5 bg-black/40 p-3 font-mono text-[11px] leading-relaxed">
