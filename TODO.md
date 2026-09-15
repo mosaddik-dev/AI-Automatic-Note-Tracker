@@ -269,7 +269,19 @@ since none has been entered anywhere).
 11. Automatic fallback system — **done**
 12. AI note generation — **done** (wired to auto-trigger on stop + manual regenerate button)
 13. Notion-ready output — **done** (`markdownToNotionBlocks`, pragmatic subset of Markdown)
-14. Intelligent screenshot detection — **done** (frame-diff based, see above)
+14. Intelligent screenshot detection — **done** (frame-diff based, see above); reviewed again after
+    user asked "is screenshot working properly / positioned right" — found & fixed 2 real bugs:
+    (a) `NoteGenerationInput.screenshotDescriptions` was wired into the AI prompt but never actually
+    populated by `regenerateNote()`, so the AI never knew screenshots existed — fixed with
+    `buildScreenshotDescriptions()` (timestamp + nearby transcript text; **no real image captioning
+    exists** — that would need a vision-model API call per screenshot, out of scope for now);
+    (b) screenshots displayed as a disconnected thumbnail strip at the top of the popup, unrelated
+    to the transcript — fixed by inlining each screenshot into the Transcript tab right after its
+    associated transcript entry. Known, accepted limitation: `chrome.tabs.captureVisibleTab` can
+    only capture the foreground/active tab, so no screenshots happen while the user is tabbed away
+    from the recording — this is a Chrome platform restriction, not a bug. No content-aware
+    "technical topic" detection exists (only generic pixel-diff) — real scene classification was
+    judged out of scope.
 15. Screenshot storage/association — **done**
 16. Dashboard/session history — **done** (popup UI)
 17. Settings — **done** (options page: provider keys/priority, screenshot sensitivity)

@@ -19,7 +19,7 @@ import {
 } from "../ui/shared/storageKeys";
 import { associateScreenshotWithTranscript, IntelligentScreenshotCapture } from "../services/screenshot";
 import type { AIProviderConfig } from "../types/ai";
-import type { GenerationLogEntry } from "../types/session";
+import type { GenerationLogEntry, NoteSession } from "../types/session";
 
 interface ActiveRecording {
   sessionId: string;
@@ -55,10 +55,31 @@ async function captureScreenshotTick(tabId: number, sessionId: string, capture: 
     const updated = await addScreenshot(sessionId, associated);
     const update: RuntimeMessage = { type: "session-updated", session: updated };
     void chrome.runtime.sendMessage(update).catch(() => undefined);
-  } catch {
-    // Tab may have navigated away from a capturable page (chrome://, etc.) —
-    // skip this tick, the interval will just try again.
+  } catch (err) {
+    // Tab may have navigated away from a capturable page (chrome://, etc.),
+    // or captureVisibleTab hit its rate limit — skip this tick, the interval
+    // will just try again. Still log it so a persistent failure is visible
+    // in the service worker's console instead of silently never capturing.
+    console.warn("[screenshot] capture tick failed:", err instanceof Error ? err.message : err);
   }
+}
+
+/**
+ * There's no real image captioning here (no vision-model call per
+ * screenshot) — only a timing + nearby-transcript-text description, which is
+ * enough for the AI to say "(see screenshot: ...)" at roughly the right
+ * point in the notes per NOTE_SYSTEM_PROMPT. Real content description (what
+ * the screenshot actually shows) would need a captioning API call per image.
+ */
+function buildScreenshotDescriptions(session: { screenshots: NoteSession["screenshots"]; transcript: NoteSession["transcript"] }): string[] {
+  return session.screenshots.map((shot, i) => {
+    const nearbyText =
+      shot.associatedTranscriptIndex != null ? session.transcript[shot.associatedTranscriptIndex]?.text : undefined;
+    const timeLabel = new Date(shot.timestampMs).toLocaleTimeString();
+    return nearbyText
+      ? `Screenshot ${i + 1} (captured at ${timeLabel}, while the transcript said: "${nearbyText}")`
+      : `Screenshot ${i + 1} (captured at ${timeLabel})`;
+  });
 }
 
 function newSessionId(): string {
@@ -125,6 +146,7 @@ async function regenerateNote(sessionId: string): Promise<void> {
       {
         transcript: session.transcript.map((t) => t.text).join(" "),
         sessionTitle: session.title,
+        screenshotDescriptions: buildScreenshotDescriptions(session),
       },
       configs,
       logger,

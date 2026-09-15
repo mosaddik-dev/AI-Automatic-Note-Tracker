@@ -104,15 +104,9 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
       </div>
 
       {session.screenshots.length > 0 && (
-        <div className="mb-3 flex gap-1.5 overflow-x-auto">
-          {session.screenshots.map((shot) => (
-            <img
-              key={shot.id}
-              src={shot.dataUrl}
-              alt="screenshot"
-              className="h-14 shrink-0 rounded-md border border-white/10"
-            />
-          ))}
+        <div className="mb-3 text-[11px] text-neutral-500">
+          {session.screenshots.length} screenshot{session.screenshots.length === 1 ? "" : "s"} captured — see the
+          Transcript tab for where each one was taken.
         </div>
       )}
 
@@ -136,16 +130,36 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
 
       {tab === "transcript" && (
         <div className="rounded-lg border border-white/5 bg-white/[0.03] p-3 text-xs leading-relaxed text-neutral-300">
-          {session.transcript.length === 0 ? (
+          {session.transcript.length === 0 && session.screenshots.length === 0 ? (
             <p className="text-neutral-500">No transcript captured yet.</p>
           ) : (
             <ul className="space-y-1.5">
               {session.transcript.map((entry, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="shrink-0 tabular-nums text-neutral-600">
-                    {new Date(entry.timestampMs).toLocaleTimeString()}
-                  </span>
-                  <span>{entry.text}</span>
+                <li key={i}>
+                  <div className="flex gap-2">
+                    <span className="shrink-0 tabular-nums text-neutral-600">
+                      {new Date(entry.timestampMs).toLocaleTimeString()}
+                    </span>
+                    <span>{entry.text}</span>
+                  </div>
+                  {screenshotsByTranscriptIndex(session.screenshots, i).map((shot) => (
+                    <img
+                      key={shot.id}
+                      src={shot.dataUrl}
+                      alt="screenshot taken around this point in the transcript"
+                      className="ml-6 mt-1.5 max-h-40 rounded-md border border-white/10"
+                    />
+                  ))}
+                </li>
+              ))}
+              {/* Screenshots taken before the first transcript entry (or with no association yet). */}
+              {screenshotsByTranscriptIndex(session.screenshots, undefined).map((shot) => (
+                <li key={shot.id}>
+                  <img
+                    src={shot.dataUrl}
+                    alt="screenshot"
+                    className="mt-1.5 max-h-40 rounded-md border border-white/10"
+                  />
                 </li>
               ))}
             </ul>
@@ -220,6 +234,13 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
       {children}
     </button>
   );
+}
+
+function screenshotsByTranscriptIndex(
+  screenshots: NoteSession["screenshots"],
+  index: number | undefined,
+): NoteSession["screenshots"] {
+  return screenshots.filter((s) => s.associatedTranscriptIndex === index);
 }
 
 function sanitizeFilename(name: string): string {
