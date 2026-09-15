@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import type { GenerationLogEntry, NoteSession } from "@/types/session";
 import { deleteSession, regenerateNote } from "@/ui/shared/messaging";
 import { downloadText, transcriptToText } from "@/ui/shared/download";
+import { copyText } from "@/ui/shared/clipboard";
 
 interface Props {
   session: NoteSession;
@@ -18,6 +19,7 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
   const [regenerating, setRegenerating] = useState(false);
   const [tab, setTab] = useState<Tab>(session.generatedNote ? "note" : "transcript");
   const [liveLogs, setLiveLogs] = useState<GenerationLogEntry[]>(session.generationLogs ?? []);
+  const [copiedWhat, setCopiedWhat] = useState<"transcript" | "note" | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Stream "ai-log" events for this session while it's regenerating; the
@@ -70,6 +72,23 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
   function handleExportNote() {
     if (!session.generatedNote) return;
     downloadText(`${sanitizeFilename(session.title)}-note.md`, session.generatedNote.markdown, "text/markdown");
+  }
+
+  async function handleCopyTranscript() {
+    const ok = await copyText(transcriptToText(session));
+    if (ok) {
+      setCopiedWhat("transcript");
+      setTimeout(() => setCopiedWhat((prev) => (prev === "transcript" ? null : prev)), 1500);
+    }
+  }
+
+  async function handleCopyNote() {
+    if (!session.generatedNote) return;
+    const ok = await copyText(session.generatedNote.markdown);
+    if (ok) {
+      setCopiedWhat("note");
+      setTimeout(() => setCopiedWhat((prev) => (prev === "note" ? null : prev)), 1500);
+    }
   }
 
   const bodyMaxHeight = standalone ? "" : "max-h-96";
@@ -199,11 +218,25 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
           {regenerating ? "Generating…" : "Regenerate note"}
         </button>
         <button
+          onClick={handleCopyTranscript}
+          disabled={session.transcript.length === 0}
+          className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+        >
+          {copiedWhat === "transcript" ? "Copied ✓" : "Copy transcript"}
+        </button>
+        <button
           onClick={handleExportTranscript}
           disabled={session.transcript.length === 0}
           className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
         >
           Export transcript
+        </button>
+        <button
+          onClick={handleCopyNote}
+          disabled={!session.generatedNote}
+          className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+        >
+          {copiedWhat === "note" ? "Copied ✓" : "Copy note"}
         </button>
         <button
           onClick={handleExportNote}
