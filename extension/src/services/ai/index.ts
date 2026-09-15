@@ -1,5 +1,7 @@
 export { getProvider } from "./registry";
 export { generateNoteWithFallback } from "./fallback";
+export { generateChunkedNote } from "./chunkedGeneration";
+export type { ChunkedNoteInput, ScreenshotDescription } from "./chunkedGeneration";
 export { markdownToNotionBlocks } from "./notion";
 export { NOTE_SYSTEM_PROMPT, buildUserPrompt } from "./prompts";
 export { GoogleProvider } from "./providers/GoogleProvider";

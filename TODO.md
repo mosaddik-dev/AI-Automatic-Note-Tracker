@@ -279,7 +279,37 @@ since none has been entered anywhere).
       a predictable schedule. `RECOMMENDED_MODELS` in `src/ui/shared/storageKeys.ts` is the one
       place to update when it does; no other code changes needed.
 11. Automatic fallback system — **done**
-12. AI note generation — **done** (wired to auto-trigger on stop + manual regenerate button)
+12. AI note generation — **done** (wired to auto-trigger on stop + manual regenerate button).
+    Extended for long recordings (user request: "video is very long... limit may be exceeded"):
+    - `services/ai/chunking.ts` — splits `TranscriptEntry[]` into character-budgeted chunks
+      (`DEFAULT_CHUNK_CHAR_BUDGET = 9000` chars/chunk, no tokenizer available so this is a
+      conservative char-based proxy for token limits) without ever splitting a single entry's text
+      across two chunks. `needsChunking()` gate — short transcripts are untouched, single request
+      exactly as before. Verified with a standalone smoke test: full entry coverage, no gaps/overlap.
+    - `services/ai/chunkedGeneration.ts` — `generateChunkedNote()` orchestrates multi-part
+      generation: sends each chunk through the existing `generateNoteWithFallback` in order, gives
+      each part (after the first) a short tail excerpt of the previous chunk's transcript text as
+      `previousContext` purely for continuity (consistent terminology/language — instructed NOT to
+      repeat/re-summarize it), filters `screenshotDescriptions` per chunk by
+      `associatedTranscriptIndex` range (so a screenshot only shows up in the part it actually
+      belongs to), then concatenates all parts' Markdown into the final note.
+    - `services/ai/prompts.ts` — system prompt now has explicit "Part N of M" rules: part 1 writes
+      the normal title/summary; part 2+ must NOT repeat title/summary, only continue with new
+      `## Topic` sections, staying consistent with what came before.
+    - Every chunking/sending/merging step logs through the **same live AI-logs feature** built
+      earlier (`createCollectingLogger`) — e.g. "transcript is 31000 chars — splitting into 4
+      parts", "sending part 2/4 to AI (8999 chars)…", "part 2/4 done via groq", "merging 4 parts
+      into the final note" — satisfying the user's "I will also keep a log of the ones I send" ask
+      with zero new UI work (the Logs tab already shows whatever the logger emits).
+    - `background/index.ts`'s `regenerateNote()` now calls `generateChunkedNote` instead of calling
+      `generateNoteWithFallback` directly; `buildScreenshotDescriptions()` now returns
+      `{associatedTranscriptIndex, description}[]` instead of plain `string[]` so chunking can filter
+      by index.
+    - **Not yet tested against a real long transcript / real API** — only the pure chunking-math
+      logic was smoke-tested standalone. Next verification step: record something long enough to
+      trigger multi-part generation (>~9000 chars of transcript, roughly 20-30+ min depending on
+      speech density) and confirm the Logs tab shows multiple parts and the final note reads
+      coherently across the part boundary.
 13. Notion-ready output — **done** (`markdownToNotionBlocks`, pragmatic subset of Markdown)
 14. Intelligent screenshot detection — **done** (frame-diff based, see above); reviewed again after
     user asked "is screenshot working properly / positioned right" — found & fixed 2 real bugs:

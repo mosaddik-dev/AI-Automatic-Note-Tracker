@@ -9,7 +9,7 @@ import {
   listSessions,
   saveSession,
 } from "../services/storage";
-import { generateNoteWithFallback } from "../services/ai";
+import { generateChunkedNote, type ScreenshotDescription } from "../services/ai";
 import { createCollectingLogger } from "../services/ai/logger";
 import {
   DEFAULT_SCREENSHOT_SETTINGS,
@@ -71,14 +71,18 @@ async function captureScreenshotTick(tabId: number, sessionId: string, capture: 
  * point in the notes per NOTE_SYSTEM_PROMPT. Real content description (what
  * the screenshot actually shows) would need a captioning API call per image.
  */
-function buildScreenshotDescriptions(session: { screenshots: NoteSession["screenshots"]; transcript: NoteSession["transcript"] }): string[] {
+function buildScreenshotDescriptions(session: {
+  screenshots: NoteSession["screenshots"];
+  transcript: NoteSession["transcript"];
+}): ScreenshotDescription[] {
   return session.screenshots.map((shot, i) => {
     const nearbyText =
       shot.associatedTranscriptIndex != null ? session.transcript[shot.associatedTranscriptIndex]?.text : undefined;
     const timeLabel = new Date(shot.timestampMs).toLocaleTimeString();
-    return nearbyText
+    const description = nearbyText
       ? `Screenshot ${i + 1} (captured at ${timeLabel}, while the transcript said: "${nearbyText}")`
       : `Screenshot ${i + 1} (captured at ${timeLabel})`;
+    return { associatedTranscriptIndex: shot.associatedTranscriptIndex, description };
   });
 }
 
@@ -142,11 +146,11 @@ async function regenerateNote(sessionId: string): Promise<void> {
   const configs = (stored[STORAGE_KEY_AI_PROVIDER_CONFIGS] as AIProviderConfig[] | undefined) ?? [];
 
   try {
-    const note = await generateNoteWithFallback(
+    const note = await generateChunkedNote(
       {
-        transcript: session.transcript.map((t) => t.text).join(" "),
+        transcript: session.transcript,
         sessionTitle: session.title,
-        screenshotDescriptions: buildScreenshotDescriptions(session),
+        screenshots: buildScreenshotDescriptions(session),
       },
       configs,
       logger,
