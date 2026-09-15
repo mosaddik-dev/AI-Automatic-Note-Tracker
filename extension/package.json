@@ -1,6 +1,12 @@
 {
   "name": "ai-automatic-note-tracker",
   "version": "0.1.0",
+  "description": "Chrome/Brave extension: local offline Bengali speech-to-text with AI-generated notes and automatic provider fallback.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mosaddik-dev/AI-Automatic-Note-Tracker.git"
+  },
   "private": true,
   "type": "module",
   "scripts": {

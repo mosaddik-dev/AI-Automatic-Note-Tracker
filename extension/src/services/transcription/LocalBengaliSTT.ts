@@ -3,7 +3,7 @@ import type { AudioChunk, TranscriptSegment, TranscriptionProvider } from "../..
 /**
  * Thin wrapper around sherpa-onnx's official WebAssembly ASR build
  * (`public/transcription-runtime/`), built from upstream k2-fsa/sherpa-onnx
- * with our Bengali streaming zipformer2 model baked in (see TODO.md, Phase 0).
+ * with our Bengali streaming zipformer2 model baked in (see docs/TODO.md, Phase 0).
  *
  * This is Emscripten-generated glue, not an ES module: it expects a global
  * `Module` object to exist before it loads, and it attaches its own globals
