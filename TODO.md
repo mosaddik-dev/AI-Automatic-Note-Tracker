@@ -254,6 +254,34 @@ a screenshot gets captured on a visual change (while the tab stays focused), sto
 auto-generates a note (or fails clearly if no real AI provider API key is configured yet — expected,
 since none has been entered anywhere).
 
+## YouTube built-in transcript (user request, "side by side" option chosen)
+
+- `src/background/youtubeTranscript.ts`: `isYouTubeWatchUrl()` detects a YouTube watch-page tab;
+  `tryFetchYouTubeTranscript()` reads the video's own caption track list from
+  `ytInitialPlayerResponse` (a page global YouTube's own player UI reads — **not a documented/
+  stable public API**, could break if YouTube changes its internals, but this is the same approach
+  many existing tools use) via `chrome.scripting.executeScript({world: "MAIN"})` since content
+  scripts run in an isolated world and can't see page globals directly. Prefers a Bengali track,
+  then a manually-created (non-"asr") track over auto-generated captions, fetches the chosen
+  track's `timedtext` URL with `&fmt=json3`, and parses into `TranscriptEntry[]`.
+- **Important**: YouTube caption timestamps are video-relative (0 = video start), NOT wall-clock
+  like the recorded transcript — kept as a separate `NoteSession.youtubeTranscript` field, never
+  merged with `session.transcript`, since the two use different time bases entirely.
+- `background/index.ts`: `startRecording()` fires this fetch in the background (fire-and-forget,
+  doesn't block audio recording setup) when the tab is a YouTube watch page; result attaches to the
+  session and broadcasts `session-updated` once ready (may arrive a moment after recording starts).
+- UI (`SessionDetail.tsx`): when a YouTube transcript is available, a "Recorded / YouTube captions"
+  toggle appears above the tabs — switches what the Transcript tab shows, what Copy/Export
+  transcript operate on, and which transcript `Regenerate note` uses
+  (`regenerate-note` message gained an optional `source: "recorded" | "youtube"` field).
+  Screenshot inline-embedding in the Transcript tab only applies to the recorded source (screenshot
+  `associatedTranscriptIndex` values are computed against `session.transcript`'s indices/timestamps
+  and don't line up with the YouTube caption array). The Timeline tab always shows the recorded
+  transcript/screenshots regardless of the toggle, for the same reason.
+- **Not yet tested against a real YouTube video** — next step: record a YouTube tab that has
+  captions (try one with manually-uploaded Bengali captions if possible, since auto-generated
+  captions may not support Bengali at all) and confirm the toggle appears with real caption text.
+
 ## Roadmap (Phases 1–21 from prompt.md) — status
 
 1. Local STT model integration — **done** (Phase 0 above)

@@ -7,7 +7,6 @@ import type { NoteSession } from "@/types/session";
  * should fold these in; kept here so the UI stays functional in the meantime.
  */
 export type UiExtraMessage =
-  | { type: "regenerate-note"; sessionId: string }
   | { type: "get-ai-provider-configs" }
   | { type: "set-ai-provider-configs"; configs: unknown[] };
 
@@ -26,8 +25,8 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await send({ type: "delete-session", sessionId });
 }
 
-export async function regenerateNote(sessionId: string): Promise<void> {
-  await send({ type: "regenerate-note", sessionId });
+export async function regenerateNote(sessionId: string, source?: "recorded" | "youtube"): Promise<void> {
+  await send({ type: "regenerate-note", sessionId, source });
 }
 
 export async function getActiveTabId(): Promise<number | undefined> {

@@ -6,6 +6,7 @@ import { deleteSession, regenerateNote } from "@/ui/shared/messaging";
 import { downloadText, transcriptToText } from "@/ui/shared/download";
 import { copyText } from "@/ui/shared/clipboard";
 import { renderNoteMarkdown } from "@/ui/shared/renderNoteMarkdown";
+import { formatElapsed } from "@/ui/shared/time";
 import { SessionTimeline } from "./SessionTimeline";
 
 interface Props {
@@ -23,6 +24,12 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
   const [liveLogs, setLiveLogs] = useState<GenerationLogEntry[]>(session.generationLogs ?? []);
   const [copiedWhat, setCopiedWhat] = useState<"transcript" | "note" | null>(null);
   const [pendingJumpIndex, setPendingJumpIndex] = useState<number | null>(null);
+  const hasYouTubeTranscript = (session.youtubeTranscript?.length ?? 0) > 0;
+  const [transcriptSource, setTranscriptSource] = useState<"recorded" | "youtube">(
+    hasYouTubeTranscript ? "youtube" : "recorded",
+  );
+  const usingYouTube = transcriptSource === "youtube" && hasYouTubeTranscript;
+  const activeTranscript = usingYouTube ? session.youtubeTranscript! : session.transcript;
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Stream "ai-log" events for this session while it's regenerating; the
@@ -66,7 +73,7 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
     setLiveLogs([]);
     setTab("logs");
     try {
-      await regenerateNote(session.id);
+      await regenerateNote(session.id, usingYouTube ? "youtube" : "recorded");
     } finally {
       setRegenerating(false);
     }
@@ -84,7 +91,11 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
   }
 
   function handleExportTranscript() {
-    downloadText(`${sanitizeFilename(session.title)}-transcript.txt`, transcriptToText(session));
+    const suffix = usingYouTube ? "youtube-transcript" : "transcript";
+    downloadText(
+      `${sanitizeFilename(session.title)}-${suffix}.txt`,
+      transcriptToText(session.title, activeTranscript, usingYouTube),
+    );
   }
 
   function handleExportNote() {
@@ -93,7 +104,7 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
   }
 
   async function handleCopyTranscript() {
-    const ok = await copyText(transcriptToText(session));
+    const ok = await copyText(transcriptToText(session.title, activeTranscript, usingYouTube));
     if (ok) {
       setCopiedWhat("transcript");
       setTimeout(() => setCopiedWhat((prev) => (prev === "transcript" ? null : prev)), 1500);
@@ -147,12 +158,36 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
         </div>
       )}
 
+      {hasYouTubeTranscript && (
+        <div className="mb-2 flex items-center gap-2 text-[11px]">
+          <span className="text-neutral-500">Transcript source:</span>
+          <div className="flex gap-1 rounded-md border border-white/5 bg-white/[0.02] p-0.5">
+            <button
+              onClick={() => setTranscriptSource("recorded")}
+              className={`rounded px-2 py-0.5 font-medium transition-colors ${
+                !usingYouTube ? "bg-white/10 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"
+              }`}
+            >
+              Recorded ({session.transcript.length})
+            </button>
+            <button
+              onClick={() => setTranscriptSource("youtube")}
+              className={`rounded px-2 py-0.5 font-medium transition-colors ${
+                usingYouTube ? "bg-white/10 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"
+              }`}
+            >
+              YouTube captions ({session.youtubeTranscript?.length ?? 0})
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mb-2 flex gap-1 rounded-lg border border-white/5 bg-white/[0.02] p-1">
         <TabButton active={tab === "note"} onClick={() => setTab("note")}>
           Note
         </TabButton>
         <TabButton active={tab === "transcript"} onClick={() => setTab("transcript")}>
-          Transcript ({session.transcript.length})
+          Transcript ({activeTranscript.length})
         </TabButton>
         <TabButton active={tab === "timeline"} onClick={() => setTab("timeline")}>
           Timeline
@@ -174,38 +209,40 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
 
       {tab === "transcript" && (
         <div className="rounded-lg border border-white/5 bg-white/[0.03] p-3 text-xs leading-relaxed text-neutral-300">
-          {session.transcript.length === 0 && session.screenshots.length === 0 ? (
+          {activeTranscript.length === 0 && session.screenshots.length === 0 ? (
             <p className="text-neutral-500">No transcript captured yet.</p>
           ) : (
             <ul className="space-y-1.5">
-              {session.transcript.map((entry, i) => (
+              {activeTranscript.map((entry, i) => (
                 <li key={i} id={`transcript-entry-${i}`}>
                   <div className="flex gap-2">
                     <span className="shrink-0 tabular-nums text-neutral-600">
-                      {new Date(entry.timestampMs).toLocaleTimeString()}
+                      {usingYouTube ? formatElapsed(entry.timestampMs) : new Date(entry.timestampMs).toLocaleTimeString()}
                     </span>
                     <span>{entry.text}</span>
                   </div>
-                  {screenshotsByTranscriptIndex(session.screenshots, i).map((shot) => (
-                    <img
-                      key={shot.id}
-                      src={shot.dataUrl}
-                      alt="screenshot taken around this point in the transcript"
-                      className="ml-6 mt-1.5 max-h-40 rounded-md border border-white/10"
-                    />
-                  ))}
+                  {!usingYouTube &&
+                    screenshotsByTranscriptIndex(session.screenshots, i).map((shot) => (
+                      <img
+                        key={shot.id}
+                        src={shot.dataUrl}
+                        alt="screenshot taken around this point in the transcript"
+                        className="ml-6 mt-1.5 max-h-40 rounded-md border border-white/10"
+                      />
+                    ))}
                 </li>
               ))}
               {/* Screenshots taken before the first transcript entry (or with no association yet). */}
-              {screenshotsByTranscriptIndex(session.screenshots, undefined).map((shot) => (
-                <li key={shot.id}>
-                  <img
-                    src={shot.dataUrl}
-                    alt="screenshot"
-                    className="mt-1.5 max-h-40 rounded-md border border-white/10"
-                  />
-                </li>
-              ))}
+              {!usingYouTube &&
+                screenshotsByTranscriptIndex(session.screenshots, undefined).map((shot) => (
+                  <li key={shot.id}>
+                    <img
+                      src={shot.dataUrl}
+                      alt="screenshot"
+                      className="mt-1.5 max-h-40 rounded-md border border-white/10"
+                    />
+                  </li>
+                ))}
             </ul>
           )}
         </div>
@@ -246,14 +283,14 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
         </button>
         <button
           onClick={handleCopyTranscript}
-          disabled={session.transcript.length === 0}
+          disabled={activeTranscript.length === 0}
           className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
         >
           {copiedWhat === "transcript" ? "Copied ✓" : "Copy transcript"}
         </button>
         <button
           onClick={handleExportTranscript}
-          disabled={session.transcript.length === 0}
+          disabled={activeTranscript.length === 0}
           className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
         >
           Export transcript

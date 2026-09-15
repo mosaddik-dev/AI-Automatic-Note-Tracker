@@ -18,6 +18,7 @@ import {
   type ScreenshotSettings,
 } from "../ui/shared/storageKeys";
 import { associateScreenshotWithTranscript, IntelligentScreenshotCapture } from "../services/screenshot";
+import { isYouTubeWatchUrl, tryFetchYouTubeTranscript } from "./youtubeTranscript";
 import type { AIProviderConfig } from "../types/ai";
 import type { GenerationLogEntry, NoteSession } from "../types/session";
 
@@ -90,6 +91,20 @@ function newSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Fire-and-forget: fetches YouTube's own captions (if any) and attaches them to the session once ready. */
+async function attachYouTubeTranscriptIfAvailable(tabId: number, sessionId: string): Promise<void> {
+  const entries = await tryFetchYouTubeTranscript(tabId).catch(() => null);
+  if (!entries) return;
+
+  const session = await getSession(sessionId);
+  if (!session) return;
+  session.youtubeTranscript = entries;
+  session.updatedAt = Date.now();
+  await saveSession(session);
+  const update: RuntimeMessage = { type: "session-updated", session };
+  void chrome.runtime.sendMessage(update).catch(() => undefined);
+}
+
 async function startRecording(tabId: number): Promise<void> {
   if (activeRecordings.has(tabId)) {
     return;
@@ -120,13 +135,20 @@ async function startRecording(tabId: number): Promise<void> {
 
   activeRecordings.set(tabId, { sessionId, screenshotCapture, screenshotTimer });
 
+  if (isYouTubeWatchUrl(tab.url)) {
+    void attachYouTubeTranscriptIfAvailable(tabId, sessionId);
+  }
+
   const message: RuntimeMessage = { type: "capture-tab-audio", tabId, streamId, sessionId };
   await chrome.runtime.sendMessage(message);
 }
 
-async function regenerateNote(sessionId: string): Promise<void> {
+async function regenerateNote(sessionId: string, source: "recorded" | "youtube" = "recorded"): Promise<void> {
   const session = await getSession(sessionId);
   if (!session) return;
+
+  const useYouTube = source === "youtube" && !!session.youtubeTranscript?.length;
+  const transcript = useYouTube ? session.youtubeTranscript! : session.transcript;
 
   const logs: GenerationLogEntry[] = [];
   const logger = createCollectingLogger((entry) => {
@@ -134,6 +156,12 @@ async function regenerateNote(sessionId: string): Promise<void> {
     const logMessage: RuntimeMessage = { type: "ai-log", sessionId, entry };
     void chrome.runtime.sendMessage(logMessage).catch(() => undefined);
   });
+
+  logger.info(
+    useYouTube
+      ? "using YouTube's caption track as the transcript source"
+      : "using the recorded speech transcript",
+  );
 
   session.status = "processing";
   session.generationLogs = logs;
@@ -146,11 +174,16 @@ async function regenerateNote(sessionId: string): Promise<void> {
   const configs = (stored[STORAGE_KEY_AI_PROVIDER_CONFIGS] as AIProviderConfig[] | undefined) ?? [];
 
   try {
+    // Screenshot associations (associatedTranscriptIndex) are computed
+    // against `session.transcript`'s indices/timestamps — they don't line
+    // up with the YouTube caption array's different indices/time base, so
+    // screenshot embedding only applies when generating from the recorded
+    // transcript.
     const note = await generateChunkedNote(
       {
-        transcript: session.transcript,
+        transcript,
         sessionTitle: session.title,
-        screenshots: buildScreenshotDescriptions(session),
+        screenshots: useYouTube ? [] : buildScreenshotDescriptions(session),
       },
       configs,
       logger,
@@ -252,7 +285,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
       return true;
 
     case "regenerate-note":
-      void regenerateNote(message.sessionId).then(() => sendResponse({ ok: true }));
+      void regenerateNote(message.sessionId, message.source).then(() => sendResponse({ ok: true }));
       return true;
 
     default:
