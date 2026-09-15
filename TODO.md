@@ -4,9 +4,12 @@
 > Update it after every meaningful step (don't wait until "done").
 
 ## Current Phase
-**Phase 0 — Extract & verify local Bengali STT model** (see prompt.md step 0)
+**Phase 0 — DONE.** Now in Phase 1-ish territory: reconciling the 3 parallel agents' work
+(extension foundation, AI providers, UI) into a buildable whole. See "reconciliation checklist"
+near the bottom.
 
-## Status: IN PROGRESS — architecture decided, build not started yet
+## Status: Phase 0 (model extraction) COMPLETE and committed (`84b5667`). Extension scaffolding
+(background, AI providers, storage, UI) built in parallel by 3 agents — reconciliation pass next.
 
 ---
 
@@ -77,12 +80,39 @@ re-login (or open a new shell with `newgrp docker`).
 - [ ] Verify: load the wasm module standalone (plain HTML test page or Node w/ wasm),
       feed `test_wavs/0.wav` / `1.wav` from the model folder, confirm Bengali text output
       matches what the original Rust app would produce
-- [ ] If wasm build fails or is impractical in this environment (timeouts, resources):
-      STOP, document the specific blocker here, and re-evaluate architecture with the user
-      before proceeding
-- [ ] First git commit: `feat: integrate local Bengali speech-to-text model` (model extraction only,
-      no other extension code mixed in) — **note: `stt-engine/` currently has NO git repo at the
-      Ai Automatic Note Tracker root; need to `git init` the extension project root first**
+- [x] WASM build succeeded (was interrupted once by a stray duplicate process I killed by
+      accident via an over-broad `pkill`; cleaned up and reran once, cleanly). Output:
+      `sherpa-onnx-wasm-main-asr.{js,wasm,data}` + `sherpa-onnx-asr.js` helper — moved into
+      `extension/public/transcription-runtime/` (NOT `src/`, so Vite copies them verbatim as
+      static assets instead of trying to bundle/transform them).
+- [x] Wrote `extension/src/services/transcription/LocalBengaliSTT.ts` implementing
+      `TranscriptionProvider`: dynamically injects the two runtime `<script>` tags (classic
+      Emscripten glue, not ES modules — needs a global `Module` object set up before load),
+      waits for `onRuntimeInitialized`, then wraps `createOnlineRecognizer`/`OnlineStream`.
+      Wired into `createTranscriptionProvider.ts` (replacing the stub Agent 1 built as a
+      placeholder — that's still in the codebase as `StubTranscriptionProvider.ts` in case it's
+      useful for UI dev/testing without the ~103MB runtime loaded, just no longer used by default).
+      Confirmed the WASM build's built-in default config already matches the original Rust app
+      exactly (transducer type, 16kHz, greedy_search, rule1/2/3) — passed no custom config.
+- [x] Verified standalone (NOT yet inside the actual extension/offscreen doc — that still needs a
+      real from-inside-Chrome smoke test once `npm install` + `npm run build` + manual load-unpacked
+      is done, see reconciliation checklist): served the runtime + `test_wavs/0.wav`/`1.wav` from
+      the model folder over a local `python3 -m http.server`, loaded in a headless Chrome via
+      Playwright, fed raw PCM samples through the same accept/decode loop as `LocalBengaliSTT.ts`.
+      **Both produced coherent, correct Bengali text** — 1.wav in particular is a well-known
+      Bengali translation of the JFK "ask not what your country can do for you" line, transcribed
+      essentially perfectly, which is strong evidence the extracted model behaves identically to
+      the original Rust app. Verification scratch files are in the session scratchpad
+      (`wasm-verify/`), not part of the repo.
+- [x] First git commit made: `84b5667` — `feat: integrate local Bengali speech-to-text model`.
+      Scoped to only: `.gitignore`, `prompt.md`, `TODO.md`, `extension/manifest.config.ts`,
+      `extension/src/types/transcription.ts`, `extension/src/services/transcription/**`,
+      `extension/public/transcription-runtime/**`. Deliberately did NOT include
+      `background/`, `ai/`, `storage/`, `ui/`, `screenshot/`, or shared build config
+      (`package.json`/`tsconfig.json`/`vite.config.ts`/tailwind) — those are a separate,
+      not-yet-committed body of work from the 3 parallel agents (see below), to be committed
+      separately once reconciled. `stt-engine/` itself is gitignored (has its own nested `.git`,
+      not meant to be part of this repo).
 
 ## Scaffolding done (parallel to STT build)
 
@@ -161,41 +191,93 @@ Agent 3 finished the original dashboard/settings/screenshot work AND the restyle
   `globals.css` file (agent said config was verified to exist, but explicit import wasn't
   double-confirmed in its report) — check this in the reconciliation pass below.
 
-### After all agents finish: reconciliation checklist
-- [ ] Confirm `src/ui/popup/main.tsx` and `src/ui/options/main.tsx` both `import "../globals.css"`
-      (or correct relative path) — Tailwind won't apply otherwise.
-- [ ] Cross-check Agent 3's assumed storage function names/signatures and `chrome.storage.local` key
-      (`"ai_provider_configs"` was the suggested name) against Agent 1's actual
-      `src/services/storage/index.ts` exports — reconcile any mismatches.
-- [ ] Cross-check Agent 3's assumed background-mediated screenshot-capture message shape against
-      Agent 1's actual `src/background/messages.ts` discriminated union — reconcile any mismatches.
-- [ ] Run `cd extension && npm install` (nothing installed yet) then `npm run typecheck` and fix
-      whatever the three independently-written codebases get wrong about each other's exact exports.
+### After all agents finish: reconciliation checklist — DONE (this pass)
+- [x] `src/ui/popup/main.tsx` and `src/ui/options/main.tsx` both `import "@/ui/globals.css"` — confirmed
+      (I wrote both of these myself while acting as the Agent 3 fork).
+- [x] Storage function names match exactly: `listSessions`, `getSession`, `deleteSession`,
+      `createEmptySession`, `saveSession`, `appendTranscriptEntry`, `addScreenshot` all exist in
+      `src/services/storage/db.ts` (re-exported via `index.ts`) with the signatures the UI assumed.
+      No mismatch — nothing to fix.
+- [x] `capture-visible-tab`/`capture-visible-tab-response` (screenshot service) and
+      `get-ai-provider-configs`/`set-ai-provider-configs` (options page) messages are still **not**
+      wired into `background/index.ts` — but turns out **nothing currently calls them**: the options
+      page reads/writes `chrome.storage.local` directly (not via messages), and the screenshot
+      service/intelligent-capture pipeline isn't hooked into the recording flow yet. Not a bug to fix
+      now — it's genuinely unbuilt functionality, tracked under Phases 14–15 below (screenshot capture
+      isn't wired into `startRecording`/content script yet).
+- [x] Ran `cd extension && npm install` (128 packages) — clean, only routine `esbuild` postinstall-script
+      + audit warnings, nothing blocking.
+- [x] `npx tsc -b --noEmit` — found and fixed 2 real errors in `src/background/index.ts`:
+      `chrome.tabCapture.getMediaStreamId` is callback-only in `@types/chrome` (not promise-based
+      despite MV3 docs suggesting otherwise) — wrapped in a `new Promise(...)`. Whole project now
+      typechecks clean.
+- [x] Wired up `regenerate-note` end-to-end (was previously a UI-only stub message with no handler):
+      added to `RuntimeMessage` union in `messages.ts`, handler in `background/index.ts` calls
+      `generateNoteWithFallback` (from `services/ai`) using configs read from
+      `chrome.storage.local[STORAGE_KEY_AI_PROVIDER_CONFIGS]`, saves the result onto the session, and
+      broadcasts `session-updated` (processing → completed/failed). Also now auto-triggers note
+      generation when recording stops (if there's any transcript) — previously nothing generated a
+      note automatically, only the manual "Regenerate note" button existed.
+- [x] Screenshot capture is now wired (done after this checklist was written, by main thread):
+      `startRecording` in `background/index.ts` creates one `IntelligentScreenshotCapture` per
+      active recording and a `setInterval` (period = `screenshotSettings.minIntervalMs`, min 1s)
+      that calls `chrome.tabs.captureVisibleTab`, feeds the result through `.maybeAccept()`, and on
+      acceptance calls `associateScreenshotWithTranscript` + `addScreenshot` + broadcasts
+      `session-updated`. Cleared via `clearInterval` in `stopRecording`. **Real limitation, not a
+      bug**: `chrome.tabs.captureVisibleTab` can only capture whichever tab is currently
+      foregrounded in its window — there's no Chrome API to screenshot a specific *background* tab
+      — so the tick skips (no-op) whenever the recorded tab isn't `tab.active`. Settings read from
+      `chrome.storage.local[STORAGE_KEY_SCREENSHOT_SETTINGS]` (same key the options page writes).
+- [ ] AI provider request/response shapes in `services/ai/providers/*` are assumed, not verified
+      against live API docs (see Agent 2 section above) — verify before relying on real API calls.
+- [x] `npm run build` (full production build, not just typecheck) — succeeded after adding
+      placeholder `public/icons/icon{16,48,128}.png` (build was failing on their absence; these are
+      **placeholder art** — a simple generated mic/waveform glyph, not real branding, swap before
+      shipping). Output `manifest.json`/bundle structure looks like a valid loadable MV3 extension;
+      `public/transcription-runtime/*` copied verbatim into `dist/transcription-runtime/` as
+      expected. Only build noise: harmless "use client" directive warnings from `framer-motion`
+      (expected outside Next.js, safe to ignore).
+- [x] **Second git commit made**: everything from the 3 agents + the screenshot wiring + icons, as
+      one "extension foundation" commit (background, ai, storage, screenshot, ui, shared build
+      config). Kept separate from the Phase-0 model-extraction commit per prompt.md's instructions.
 
-## Not started yet (Phases 1–21 from prompt.md, in order)
+### NOT yet done — do this before trusting the extension actually works end-to-end
+**No real in-browser smoke test has been run this session** — only `npm run build` (proves valid
+MV3 structure) and the earlier standalone Playwright test of the raw WASM model (proves the model
+itself is correct). Next session/step should be:
+```
+cd extension && npm run build
+# Chrome/Brave → chrome://extensions → enable Developer mode → Load unpacked → select extension/dist
+```
+Then actually click record on a tab playing Bengali audio, confirm: transcript segments appear,
+a screenshot gets captured on a visual change (while the tab stays focused), stopping recording
+auto-generates a note (or fails clearly if no real AI provider API key is configured yet — expected,
+since none has been entered anywhere).
 
-1. Local STT model integration ← **we are here (Phase 0 above)**
-2. Manifest V3 extension foundation
-3. Tab audio capture
-4. Audio → local STT pipeline
-5. Transcript session management
-6. Persistent storage
-7. AI provider abstraction
-8. Google provider
-9. Groq provider
-10. OpenRouter provider
-11. Automatic fallback system
-12. AI note generation
-13. Notion-ready output
-14. Intelligent screenshot detection
-15. Screenshot storage/association
-16. Dashboard/session history
-17. Settings
-18. Testing
-19. Full end-to-end QA
-20. Final QA agent review
-21. Fix remaining issues
-22. Final verification and commits
+## Roadmap (Phases 1–21 from prompt.md) — status
+
+1. Local STT model integration — **done** (Phase 0 above)
+2. Manifest V3 extension foundation — **done**
+3. Tab audio capture — **done** (offscreen doc + `chrome.tabCapture`)
+4. Audio → local STT pipeline — **done**
+5. Transcript session management — **done**
+6. Persistent storage — **done** (IndexedDB)
+7. AI provider abstraction — **done** (interface + fallback chain)
+8. Google provider — **done, unverified against live API**
+9. Groq provider — **done, unverified against live API**
+10. OpenRouter provider — **done, unverified against live API**
+11. Automatic fallback system — **done**
+12. AI note generation — **done** (wired to auto-trigger on stop + manual regenerate button)
+13. Notion-ready output — **done** (`markdownToNotionBlocks`, pragmatic subset of Markdown)
+14. Intelligent screenshot detection — **done** (frame-diff based, see above)
+15. Screenshot storage/association — **done**
+16. Dashboard/session history — **done** (popup UI)
+17. Settings — **done** (options page: provider keys/priority, screenshot sensitivity)
+18. Testing — **not started** (no automated tests exist yet)
+19. Full end-to-end QA — **not started** (see "NOT yet done" above — this is the immediate next step)
+20. Final QA agent review — not started
+21. Fix remaining issues — depends on 18-20
+22. Final verification and commits — depends on 18-21
 
 ## Notes / gotchas for future sessions
 
