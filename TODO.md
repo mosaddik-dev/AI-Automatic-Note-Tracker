@@ -263,9 +263,21 @@ since none has been entered anywhere).
 5. Transcript session management — **done**
 6. Persistent storage — **done** (IndexedDB)
 7. AI provider abstraction — **done** (interface + fallback chain)
-8. Google provider — **done, unverified against live API**
-9. Groq provider — **done, unverified against live API**
-10. OpenRouter provider — **done, unverified against live API**
+8. Google provider — **done**; hit live-API breakage: default model `gemini-1.5-flash` was retired
+   (404 "not found for API version v1beta"). Updated default to `gemini-2.5-flash` (per
+   RECOMMENDED_MODELS in `src/ui/shared/storageKeys.ts`).
+9. Groq provider — **done**; hit live-API breakage: default model `llama-3.1-70b-versatile` was
+   decommissioned by Groq (~2026-08). Updated default to `openai/gpt-oss-20b`.
+10. OpenRouter provider — **done**; `openrouter/auto` untouched, not affected.
+    - Since defaults only apply on a fresh install (a user's already-saved `chrome.storage.local`
+      config keeps its old model string forever otherwise), also added a live "outdated model"
+      hint + "Use recommended" one-click reset button + model-list doc link to each provider row
+      in the Options page (`src/ui/options/components/ProviderConfigRow.tsx`), driven by the same
+      `RECOMMENDED_MODELS` map — so this class of breakage is at least visible and fixable in the UI
+      next time a provider retires a model, without needing another code change to notice it.
+    - **This will keep happening** — providers retire model names outright with no warning, not on
+      a predictable schedule. `RECOMMENDED_MODELS` in `src/ui/shared/storageKeys.ts` is the one
+      place to update when it does; no other code changes needed.
 11. Automatic fallback system — **done**
 12. AI note generation — **done** (wired to auto-trigger on stop + manual regenerate button)
 13. Notion-ready output — **done** (`markdownToNotionBlocks`, pragmatic subset of Markdown)

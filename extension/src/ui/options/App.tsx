@@ -5,15 +5,16 @@ import {
   STORAGE_KEY_AI_PROVIDER_CONFIGS,
   STORAGE_KEY_SCREENSHOT_SETTINGS,
   DEFAULT_SCREENSHOT_SETTINGS,
+  RECOMMENDED_MODELS,
   type ScreenshotSettings,
 } from "@/ui/shared/storageKeys";
 import { SpotlightCard } from "@/ui/shared/SpotlightCard";
 import { ProviderConfigRow } from "./components/ProviderConfigRow";
 
 const DEFAULT_PROVIDERS: AIProviderConfig[] = [
-  { id: "google", apiKey: "", model: "gemini-1.5-flash", enabled: false, priority: 1 },
-  { id: "groq", apiKey: "", model: "llama-3.1-70b-versatile", enabled: false, priority: 2 },
-  { id: "openrouter", apiKey: "", model: "openrouter/auto", enabled: false, priority: 3 },
+  { id: "google", apiKey: "", model: RECOMMENDED_MODELS.google, enabled: false, priority: 1 },
+  { id: "groq", apiKey: "", model: RECOMMENDED_MODELS.groq, enabled: false, priority: 2 },
+  { id: "openrouter", apiKey: "", model: RECOMMENDED_MODELS.openrouter, enabled: false, priority: 3 },
 ];
 
 export function App() {

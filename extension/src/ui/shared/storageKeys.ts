@@ -18,3 +18,18 @@ export const DEFAULT_SCREENSHOT_SETTINGS: ScreenshotSettings = {
   sensitivity: 0.08,
   minIntervalMs: 4000,
 };
+
+/**
+ * AI providers frequently retire model names outright (not just deprecate —
+ * calls to a decommissioned model fail immediately with a 404/400). Keep
+ * this map updated when that happens; it's also surfaced as a "Use
+ * recommended" reset button in the settings UI, since a config saved before
+ * a retirement will otherwise keep failing silently until the user notices.
+ * Last checked: 2026-09 — gemini-1.5-flash and Groq's llama-3.1/3.3 models
+ * were retired around 2026-08.
+ */
+export const RECOMMENDED_MODELS: Record<"google" | "groq" | "openrouter", string> = {
+  google: "gemini-2.5-flash",
+  groq: "openai/gpt-oss-20b",
+  openrouter: "openrouter/auto",
+};
