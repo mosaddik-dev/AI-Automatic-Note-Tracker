@@ -26,10 +26,11 @@ export const DEFAULT_SCREENSHOT_SETTINGS: ScreenshotSettings = {
  * recommended" reset button in the settings UI, since a config saved before
  * a retirement will otherwise keep failing silently until the user notices.
  * Last checked: 2026-09 — gemini-1.5-flash and Groq's llama-3.1/3.3 models
- * were retired around 2026-08.
+ * were retired around 2026-08; gemini-2.5-flash was in turn cut off from new
+ * users shortly after (Google's own error response names the replacement).
  */
 export const RECOMMENDED_MODELS: Record<"google" | "groq" | "openrouter", string> = {
-  google: "gemini-2.5-flash",
+  google: "gemini-3.6-flash",
   groq: "openai/gpt-oss-20b",
   openrouter: "openrouter/auto",
 };

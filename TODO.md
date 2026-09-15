@@ -278,6 +278,22 @@ since none has been entered anywhere).
     - **This will keep happening** — providers retire model names outright with no warning, not on
       a predictable schedule. `RECOMMENDED_MODELS` in `src/ui/shared/storageKeys.ts` is the one
       place to update when it does; no other code changes needed.
+    - **Round 2** (same day): `gemini-2.5-flash` was ALSO cut off from new users within the same
+      session — Google's own 404 response named the replacement (`gemini-3.6-flash`), so updated
+      to that. Separately, real production error surfaced a wrong assumption in the chunking work
+      below: Groq rejected a 9000-char chunk with "Requested 31081... Limit 8000" (tokens per
+      minute) — Bengali text tokenizes far more densely than English (~3.4 tokens/char observed
+      here, not the ~4 chars/token this session originally assumed). Fixed
+      `DEFAULT_CHUNK_CHAR_BUDGET` down from 9000 → **1600** chars (`services/ai/chunking.ts`),
+      sized conservatively against Groq's tight on_demand free-tier cap (the tightest limit
+      actually hit) rather than against providers with much larger context windows.
+    - **Known remaining limitation, not fixed**: Groq's 8000-TPM cap is PER MINUTE across ALL
+      requests, not per-request — firing several small chunk requests back-to-back could still
+      cumulatively exceed it within the same minute even though each individual request now stays
+      well under budget. No inter-chunk throttling/delay was added (judged over-engineering for
+      this pass) — the existing provider-fallback chain is the safety net if that happens (as it
+      already did correctly in the reported error: google → groq → openrouter). If Groq keeps
+      showing up as failed in the Logs tab for multi-part generations, that's why.
 11. Automatic fallback system — **done**
 12. AI note generation — **done** (wired to auto-trigger on stop + manual regenerate button).
     Extended for long recordings (user request: "video is very long... limit may be exceeded"):

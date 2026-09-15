@@ -3,15 +3,24 @@ import type { TranscriptEntry } from "@/types/session";
 /**
  * Rough character budget per chunk of raw transcript text sent to the AI in
  * one request. There's no tokenizer here (would need one per provider), so
- * this is a conservative character-based proxy (~4 chars/token for English,
- * fewer for Bengali script, so this stays well under context limits even
- * for smaller-context models) that also leaves headroom for the system
- * prompt, screenshot descriptions, and the model's own response tokens.
+ * this is a conservative character-based proxy for token count.
+ *
+ * IMPORTANT: Bengali (and other non-Latin scripts) tokenize far more
+ * densely than English in most BPE tokenizers — observed in production:
+ * a ~9000-character Bengali-heavy chunk produced ~31,000 tokens (~3.4
+ * tokens/char), not the ~4 chars/token ballpark that holds for English.
+ * Sized conservatively against the tightest limit we've actually hit —
+ * Groq's on_demand free tier caps at 8000 tokens PER MINUTE, so a single
+ * request's transcript portion is kept small enough (even at a
+ * pessimistic ~4 tokens/char) to leave headroom for the system prompt and
+ * the model's response within that budget. Providers with much larger
+ * context windows (Gemini, most OpenRouter models) just do more, smaller
+ * requests — a performance cost, not a correctness one.
  */
-export const DEFAULT_CHUNK_CHAR_BUDGET = 9000;
+export const DEFAULT_CHUNK_CHAR_BUDGET = 1600;
 
 /** How much of the end of one chunk gets carried into the next as continuity context. */
-export const CHUNK_OVERLAP_CHARS = 400;
+export const CHUNK_OVERLAP_CHARS = 150;
 
 export interface TranscriptChunk {
   text: string;
