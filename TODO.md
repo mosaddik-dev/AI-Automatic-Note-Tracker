@@ -342,7 +342,20 @@ since none has been entered anywhere).
     judged out of scope.
 15. Screenshot storage/association — **done**
 16. Dashboard/session history — **done** (popup UI)
-17. Settings — **done** (options page: provider keys/priority, screenshot sensitivity)
+17. Settings — **done** (options page: provider keys/priority, screenshot sensitivity). Extended
+    per user request: model fields are now labeled dropdowns ("Fast"/"Normal"/"Best"/"Complex task"
+    tags) with a "Custom…" free-text fallback, defined in `src/ui/shared/modelOptions.ts`
+    (`MODEL_OPTIONS`) — researched current free-tier-friendly picks per provider (Google's free
+    tier went Flash-only in April 2026; Groq's free/on_demand tier; OpenRouter's `:free`-suffixed
+    models + `openrouter/auto` as the no-naming-risk default). Also added a **4th provider**,
+    `custom` (`AIProviderId` now includes `"custom"`, `AIProviderConfig.endpoint?: string`) — a
+    user-supplied OpenAI-compatible `/chat/completions` endpoint (model name + endpoint URL + API
+    key, all user-entered), implemented via `providers/CustomOpenAiCompatibleProvider.ts` reusing
+    the existing shared `generateNoteViaOpenAiCompatibleChat` helper, registered in `registry.ts`,
+    and participating in the same priority/fallback chain as the other three — no changes needed to
+    `fallback.ts` or `chunkedGeneration.ts` since they're already generic over `AIProviderConfig[]`.
+    Options page merges newly-added providers (like `custom`) into an already-saved config on load,
+    so existing users don't lose it or have it silently missing after this update.
 18. Testing — **not started** (no automated tests exist yet)
 19. Full end-to-end QA — **in progress**, real bugs found and fixed this pass:
     - **Muted tab audio bug**: `offscreen.ts` routed the captured tab audio only through a silenced

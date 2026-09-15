@@ -1,13 +1,16 @@
+import { useState } from "preact/hooks";
 import type { AIProviderConfig } from "@/types/ai";
 import { RECOMMENDED_MODELS } from "@/ui/shared/storageKeys";
+import { CUSTOM_MODEL_VALUE, MODEL_OPTIONS } from "@/ui/shared/modelOptions";
 
 const LABELS: Record<AIProviderConfig["id"], string> = {
   google: "Google",
   groq: "Groq",
   openrouter: "OpenRouter",
+  custom: "Custom",
 };
 
-const MODEL_LIST_URLS: Record<AIProviderConfig["id"], string> = {
+const MODEL_LIST_URLS: Partial<Record<AIProviderConfig["id"], string>> = {
   google: "https://ai.google.dev/gemini-api/docs/models",
   groq: "https://console.groq.com/docs/models",
   openrouter: "https://openrouter.ai/models",
@@ -20,11 +23,22 @@ interface Props {
 }
 
 export function ProviderConfigRow({ config, onChange, onMove }: Props) {
-  const isOutdated = config.model !== RECOMMENDED_MODELS[config.id];
+  const isCustomProvider = config.id === "custom";
+  const options = MODEL_OPTIONS[config.id];
+  const presetValues = options?.map((o) => o.value) ?? [];
+  const isKnownPreset = presetValues.includes(config.model);
+
+  // Once the user picks "Custom…" from the dropdown (or their saved model
+  // isn't one of the presets), show a free-text field instead of the select.
+  const [forceCustomInput, setForceCustomInput] = useState(!isCustomProvider && !isKnownPreset && config.model !== "");
+  const showCustomInput = isCustomProvider || forceCustomInput;
+
+  const isOutdated =
+    !isCustomProvider && config.model !== RECOMMENDED_MODELS[config.id as "google" | "groq" | "openrouter"];
 
   return (
     <div className="border-b border-white/5 py-3 last:border-0">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <span className="w-24 shrink-0 text-sm font-medium text-neutral-200">{LABELS[config.id]}</span>
         <input
           type="password"
@@ -33,13 +47,58 @@ export function ProviderConfigRow({ config, onChange, onMove }: Props) {
           onInput={(e) => onChange({ ...config, apiKey: (e.target as HTMLInputElement).value })}
           className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-indigo-500/50"
         />
-        <input
-          type="text"
-          placeholder="model"
-          value={config.model}
-          onInput={(e) => onChange({ ...config, model: (e.target as HTMLInputElement).value })}
-          className="w-40 shrink-0 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-indigo-500/50"
-        />
+
+        {isCustomProvider && (
+          <input
+            type="text"
+            placeholder="API endpoint (e.g. https://api.example.com/v1/chat/completions)"
+            value={config.endpoint ?? ""}
+            onInput={(e) => onChange({ ...config, endpoint: (e.target as HTMLInputElement).value })}
+            className="min-w-0 flex-[2] rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-indigo-500/50"
+          />
+        )}
+
+        {showCustomInput ? (
+          <div className="flex w-40 shrink-0 items-center gap-1">
+            <input
+              type="text"
+              placeholder="model name"
+              value={config.model}
+              onInput={(e) => onChange({ ...config, model: (e.target as HTMLInputElement).value })}
+              className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-indigo-500/50"
+            />
+            {!isCustomProvider && options && (
+              <button
+                type="button"
+                title="Pick from preset list instead"
+                onClick={() => setForceCustomInput(false)}
+                className="shrink-0 rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-1.5 text-[10px] text-neutral-400 hover:bg-white/[0.08]"
+              >
+                ↺
+              </button>
+            )}
+          </div>
+        ) : (
+          <select
+            value={config.model}
+            onChange={(e) => {
+              const value = (e.target as HTMLSelectElement).value;
+              if (value === CUSTOM_MODEL_VALUE) {
+                setForceCustomInput(true);
+                return;
+              }
+              onChange({ ...config, model: value });
+            }}
+            className="w-40 shrink-0 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-xs text-neutral-100 outline-none focus:border-indigo-500/50"
+          >
+            {options?.map((opt) => (
+              <option key={opt.value} value={opt.value} className="bg-neutral-900">
+                {opt.value === CUSTOM_MODEL_VALUE ? opt.tag : `${opt.tag} — ${opt.value}`}
+              </option>
+            ))}
+          </select>
+        )}
+
         <label className="flex shrink-0 items-center gap-1.5 text-xs text-neutral-400">
           <input
             type="checkbox"
@@ -69,28 +128,41 @@ export function ProviderConfigRow({ config, onChange, onMove }: Props) {
         </div>
       </div>
 
+      {isCustomProvider && (
+        <p className="ml-[6.5rem] mt-1.5 text-[11px] text-neutral-600">
+          Any OpenAI-compatible <code>/chat/completions</code> endpoint (self-hosted model, a
+          provider not built in above, a proxy, etc.) — takes part in the same fallback order as
+          the others.
+        </p>
+      )}
+
       {isOutdated && (
         <div className="ml-[6.5rem] mt-1.5 flex items-center gap-2 text-[11px] text-amber-400/90">
           <span>
-            Model differs from the current recommended default ({RECOMMENDED_MODELS[config.id]}) — if
+            Model differs from the current recommended default ({RECOMMENDED_MODELS[config.id as "google" | "groq" | "openrouter"]}) — if
             generation fails with a 404/"decommissioned" error, providers frequently retire model
             names outright.
           </span>
           <button
             type="button"
-            onClick={() => onChange({ ...config, model: RECOMMENDED_MODELS[config.id] })}
+            onClick={() => {
+              setForceCustomInput(false);
+              onChange({ ...config, model: RECOMMENDED_MODELS[config.id as "google" | "groq" | "openrouter"] });
+            }}
             className="shrink-0 rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 font-medium text-amber-300 hover:bg-amber-400/20"
           >
             Use recommended
           </button>
-          <a
-            href={MODEL_LIST_URLS[config.id]}
-            target="_blank"
-            rel="noreferrer"
-            className="shrink-0 text-neutral-500 underline hover:text-neutral-300"
-          >
-            model list ↗
-          </a>
+          {MODEL_LIST_URLS[config.id] && (
+            <a
+              href={MODEL_LIST_URLS[config.id]}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 text-neutral-500 underline hover:text-neutral-300"
+            >
+              model list ↗
+            </a>
+          )}
         </div>
       )}
     </div>

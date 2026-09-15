@@ -28,9 +28,12 @@ export const DEFAULT_SCREENSHOT_SETTINGS: ScreenshotSettings = {
  * Last checked: 2026-09 — gemini-1.5-flash and Groq's llama-3.1/3.3 models
  * were retired around 2026-08; gemini-2.5-flash was in turn cut off from new
  * users shortly after (Google's own error response names the replacement).
+ * Google's free tier is Flash-only since April 2026 (Pro models moved
+ * behind billing) — gemini-3.5-flash-lite is the fast/free-tier pick.
+ * See also MODEL_OPTIONS in modelOptions.ts for the full labeled dropdown.
  */
 export const RECOMMENDED_MODELS: Record<"google" | "groq" | "openrouter", string> = {
-  google: "gemini-3.6-flash",
+  google: "gemini-3.5-flash-lite",
   groq: "openai/gpt-oss-20b",
   openrouter: "openrouter/auto",
 };

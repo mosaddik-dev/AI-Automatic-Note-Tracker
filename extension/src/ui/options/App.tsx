@@ -15,6 +15,7 @@ const DEFAULT_PROVIDERS: AIProviderConfig[] = [
   { id: "google", apiKey: "", model: RECOMMENDED_MODELS.google, enabled: false, priority: 1 },
   { id: "groq", apiKey: "", model: RECOMMENDED_MODELS.groq, enabled: false, priority: 2 },
   { id: "openrouter", apiKey: "", model: RECOMMENDED_MODELS.openrouter, enabled: false, priority: 3 },
+  { id: "custom", apiKey: "", model: "", endpoint: "", enabled: false, priority: 4 },
 ];
 
 export function App() {
@@ -29,7 +30,12 @@ export function App() {
       .get([STORAGE_KEY_AI_PROVIDER_CONFIGS, STORAGE_KEY_SCREENSHOT_SETTINGS])
       .then((result) => {
         const stored = result[STORAGE_KEY_AI_PROVIDER_CONFIGS] as AIProviderConfig[] | undefined;
-        if (stored?.length) setProviders(stored);
+        if (stored?.length) {
+          // Merge in any provider added since the user last saved (e.g. the
+          // "custom" provider) without discarding their existing config.
+          const missing = DEFAULT_PROVIDERS.filter((d) => !stored.some((s) => s.id === d.id));
+          setProviders([...stored, ...missing]);
+        }
         const shot = result[STORAGE_KEY_SCREENSHOT_SETTINGS] as ScreenshotSettings | undefined;
         if (shot) setScreenshotSettings(shot);
       });

@@ -1,4 +1,4 @@
-export type AIProviderId = "google" | "groq" | "openrouter";
+export type AIProviderId = "google" | "groq" | "openrouter" | "custom";
 
 export interface AIProviderConfig {
   id: AIProviderId;
@@ -6,6 +6,8 @@ export interface AIProviderConfig {
   model: string;
   enabled: boolean;
   priority: number;
+  /** Only used when id === "custom": the OpenAI-compatible chat completions endpoint URL. */
+  endpoint?: string;
 }
 
 export interface NoteGenerationInput {

@@ -7,4 +7,5 @@ export { NOTE_SYSTEM_PROMPT, buildUserPrompt } from "./prompts";
 export { GoogleProvider } from "./providers/GoogleProvider";
 export { GroqProvider } from "./providers/GroqProvider";
 export { OpenRouterProvider } from "./providers/OpenRouterProvider";
+export { CustomOpenAiCompatibleProvider } from "./providers/CustomOpenAiCompatibleProvider";
 export type { Logger } from "./logger";
