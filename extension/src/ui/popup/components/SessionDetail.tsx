@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { ComponentChildren } from "preact";
+import type { ComponentChild, ComponentChildren } from "preact";
 import { motion } from "framer-motion";
 import type { GenerationLogEntry, NoteSession } from "@/types/session";
 import { deleteSession, regenerateNote } from "@/ui/shared/messaging";
@@ -223,43 +223,7 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
           {activeTranscript.length === 0 && session.screenshots.length === 0 ? (
             <p className="text-neutral-500">No transcript captured yet.</p>
           ) : (
-            <ul className="space-y-1.5">
-              {activeTranscript.map((entry, i) => (
-                <li key={i} id={`transcript-entry-${i}`}>
-                  {/* Blank entries can exist in older sessions recorded before a fix to the
-                      silence-endpoint handling; hidden here rather than filtered out of the
-                      array, since screenshot associations reference these exact indices. */}
-                  {entry.text.trim() && (
-                    <div className="flex gap-2">
-                      <span className="shrink-0 tabular-nums text-neutral-600">
-                        {usingYouTube ? formatElapsed(entry.timestampMs) : new Date(entry.timestampMs).toLocaleTimeString()}
-                      </span>
-                      <span>{entry.text}</span>
-                    </div>
-                  )}
-                  {!usingYouTube &&
-                    screenshotsByTranscriptIndex(session.screenshots, i).map((shot) => (
-                      <img
-                        key={shot.id}
-                        src={shot.dataUrl}
-                        alt="screenshot taken around this point in the transcript"
-                        className="ml-6 mt-1.5 max-h-40 rounded-md border border-white/10"
-                      />
-                    ))}
-                </li>
-              ))}
-              {/* Screenshots taken before the first transcript entry (or with no association yet). */}
-              {!usingYouTube &&
-                screenshotsByTranscriptIndex(session.screenshots, undefined).map((shot) => (
-                  <li key={shot.id}>
-                    <img
-                      src={shot.dataUrl}
-                      alt="screenshot"
-                      className="mt-1.5 max-h-40 rounded-md border border-white/10"
-                    />
-                  </li>
-                ))}
-            </ul>
+            buildTranscriptBlocks(activeTranscript, session.screenshots, usingYouTube)
           )}
           <div ref={transcriptEndRef} />
         </div>
@@ -355,6 +319,76 @@ function screenshotsByTranscriptIndex(
   index: number | undefined,
 ): NoteSession["screenshots"] {
   return screenshots.filter((s) => s.associatedTranscriptIndex === index);
+}
+
+/**
+ * Renders the transcript as flowing paragraph text (concatenated speech,
+ * like reading normal prose) instead of one short line per individual ASR
+ * segment. A new paragraph only starts where a screenshot breaks the flow.
+ * Each entry still gets an id="transcript-entry-N" anchor (inline, inside
+ * the paragraph) so Timeline jump-to-entry and recording auto-scroll keep
+ * working exactly as before — only the visual layout changed.
+ */
+function buildTranscriptBlocks(
+  entries: NoteSession["transcript"],
+  screenshots: NoteSession["screenshots"],
+  usingYouTube: boolean,
+): ComponentChildren {
+  const blocks: ComponentChild[] = [];
+  let paragraphSpans: ComponentChild[] = [];
+  let key = 0;
+
+  const flushParagraph = () => {
+    if (paragraphSpans.length === 0) return;
+    blocks.push(
+      <p key={`p-${key++}`} className="mb-2 last:mb-0">
+        {paragraphSpans}
+      </p>,
+    );
+    paragraphSpans = [];
+  };
+
+  if (!usingYouTube) {
+    screenshotsByTranscriptIndex(screenshots, undefined).forEach((shot) => {
+      blocks.push(
+        <img key={shot.id} src={shot.dataUrl} alt="screenshot" className="mb-2 max-h-40 rounded-md border border-white/10" />,
+      );
+    });
+  }
+
+  entries.forEach((entry, i) => {
+    // Blank entries can exist in older sessions recorded before a fix to the
+    // silence-endpoint handling; simply skipped here, not filtered out of
+    // the array, since screenshot associations reference these exact indices.
+    if (entry.text.trim()) {
+      const timeLabel = usingYouTube ? formatElapsed(entry.timestampMs) : new Date(entry.timestampMs).toLocaleTimeString();
+      paragraphSpans.push(
+        <span key={i} id={`transcript-entry-${i}`} title={timeLabel}>
+          {entry.text}{" "}
+        </span>,
+      );
+    }
+
+    if (!usingYouTube) {
+      const shots = screenshotsByTranscriptIndex(screenshots, i);
+      if (shots.length > 0) {
+        flushParagraph();
+        shots.forEach((shot) => {
+          blocks.push(
+            <img
+              key={shot.id}
+              src={shot.dataUrl}
+              alt="screenshot taken around this point in the transcript"
+              className="mb-2 max-h-40 rounded-md border border-white/10"
+            />,
+          );
+        });
+      }
+    }
+  });
+
+  flushParagraph();
+  return <>{blocks}</>;
 }
 
 function sanitizeFilename(name: string): string {
