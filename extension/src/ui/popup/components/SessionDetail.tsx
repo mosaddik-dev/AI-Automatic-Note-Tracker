@@ -32,6 +32,7 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
   const activeTranscript = usingYouTube ? session.youtubeTranscript! : session.transcript;
   const logsEndRef = useRef<HTMLDivElement>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Stream "ai-log" events for this session while it's regenerating; the
   // final log set also arrives persisted on session.generationLogs once the
@@ -65,11 +66,24 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
   }, [tab, pendingJumpIndex]);
 
   // Auto-scroll to the newest transcript entry while actively recording, so
-  // there's no need to manually scroll down as new speech comes in. Only
-  // while live (not a completed/static transcript someone's reading back)
-  // and not while a Timeline jump is pending a specific entry.
+  // there's no need to manually scroll down as new speech comes in — but
+  // only when already near the bottom, so manually scrolling up to reread
+  // earlier text isn't fought by being snapped back down on every new
+  // entry. Also skipped for a static (YouTube/completed) transcript and
+  // while a Timeline jump is pending a specific entry.
   useEffect(() => {
-    if (tab === "transcript" && session.status === "recording" && !usingYouTube && pendingJumpIndex == null) {
+    if (tab !== "transcript" || session.status !== "recording" || usingYouTube || pendingJumpIndex != null) {
+      return;
+    }
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    // In standalone (full-tab) view this div doesn't scroll itself — the
+    // page does — so fall back to document-level scroll metrics there.
+    const scrolls = container.scrollHeight > container.clientHeight;
+    const distanceFromBottom = scrolls
+      ? container.scrollHeight - container.scrollTop - container.clientHeight
+      : document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+    if (distanceFromBottom < 120) {
       transcriptEndRef.current?.scrollIntoView({ block: "end" });
     }
   }, [tab, session.status, usingYouTube, pendingJumpIndex, activeTranscript.length]);
@@ -135,6 +149,7 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
 
   return (
     <motion.div
+      ref={scrollContainerRef}
       initial={{ opacity: 0, x: 12 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.18 }}

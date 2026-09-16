@@ -102,17 +102,22 @@ export class LocalBengaliSTT implements TranscriptionProvider {
       this.recognizer.reset(this.stream);
     }
 
-    // No text means nothing was actually said in this chunk — including a
-    // silence-triggered endpoint with an empty result, which happens
-    // continuously while the tab is silent/paused. Never emit a blank
-    // segment; only real, non-empty transcribed text is reported.
-    if (!text) {
+    // getResult() returns the CURRENT, still-growing hypothesis for the
+    // in-progress utterance on every single call — not just newly-decoded
+    // words since last time. Reporting it on every chunk (the previous
+    // behavior) meant the same lengthening partial text got persisted as a
+    // brand new transcript entry dozens of times per utterance ("আর
+    // এইভাবে...", "আর এইভাবে সাজানোর...", "আর এইভাবে সাজানোর দরকারটাই...",
+    // each saved separately). Only report a segment once the utterance is
+    // actually finalized (isEndpoint) — that's the one moment getResult()
+    // holds the complete, settled text for what was just said.
+    if (!isEndpoint || !text) {
       return null;
     }
 
     return {
       text,
-      isFinal: isEndpoint,
+      isFinal: true,
       timestampMs: Date.now(),
     };
   }
