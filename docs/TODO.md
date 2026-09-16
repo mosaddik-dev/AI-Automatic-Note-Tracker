@@ -519,6 +519,33 @@ blank infinitely." Real bug, confirmed and fixed:
   reading back a finished session from the top, or with the Timeline's jump-to-specific-entry
   feature (both would be actively annoying if auto-scroll fired during them).
 
+## Bug: repeated/duplicating transcript text (user screenshot, 2026-09-16)
+
+Real, significant bug — user showed a screenshot of the same Bengali phrase repeated dozens of
+times, each slightly longer than the last. Root cause: `LocalBengaliSTT.transcribe()`
+(`src/services/transcription/LocalBengaliSTT.ts`) called `this.recognizer.getResult(this.stream)`
+and reported it as a segment on **every** audio chunk whenever text was non-empty. But
+`getResult()` returns the current, still-*growing* hypothesis for the in-progress utterance on
+every single call — not just newly-decoded words since the last call. Since every chunk got
+persisted as a permanent, separate transcript entry (via `appendTranscriptEntry`), one utterance
+produced dozens of entries, each a longer prefix of the previous one.
+
+**Fix**: only report a segment once `isEndpoint` is true (the utterance is actually finalized) —
+changed the guard from `if (!text) return null` to `if (!isEndpoint || !text) return null`. That's
+the one moment `getResult()` holds the complete, settled text for what was just said, not a moment
+sooner. One entry per utterance/pause now, matching expected streaming-ASR UX.
+
+Same report also flagged manual scroll-up not working — caused by the recording auto-scroll
+effect (added just prior) unconditionally forcing scroll position on every new entry, which,
+combined with the bug above firing constantly, made scrolling functionally impossible. Fixed:
+auto-scroll now only fires when already within 120px of the bottom (checked against whichever
+element actually scrolls — the popup's own container, or the page itself in standalone/full-tab
+view) — never forces the view back down if the user has manually scrolled up to reread something.
+
+**Not yet re-tested against a real recording** — next step: record again and confirm entries are
+now one-per-utterance (not exploding into repeats) and that scrolling up while recording actually
+stays put.
+
 ## Notes / gotchas for future sessions
 
 - `prompt.md` is now at `docs/prompt.md` — re-read it if unsure of requirements.
