@@ -31,6 +31,7 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
   const usingYouTube = transcriptSource === "youtube" && hasYouTubeTranscript;
   const activeTranscript = usingYouTube ? session.youtubeTranscript! : session.transcript;
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   // Stream "ai-log" events for this session while it's regenerating; the
   // final log set also arrives persisted on session.generationLogs once the
@@ -62,6 +63,16 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
       setPendingJumpIndex(null);
     }
   }, [tab, pendingJumpIndex]);
+
+  // Auto-scroll to the newest transcript entry while actively recording, so
+  // there's no need to manually scroll down as new speech comes in. Only
+  // while live (not a completed/static transcript someone's reading back)
+  // and not while a Timeline jump is pending a specific entry.
+  useEffect(() => {
+    if (tab === "transcript" && session.status === "recording" && !usingYouTube && pendingJumpIndex == null) {
+      transcriptEndRef.current?.scrollIntoView({ block: "end" });
+    }
+  }, [tab, session.status, usingYouTube, pendingJumpIndex, activeTranscript.length]);
 
   function handleJumpToEntry(entryIndex: number) {
     setPendingJumpIndex(entryIndex);
@@ -250,6 +261,7 @@ export function SessionDetail({ session, onBack, onDeleted, standalone = false }
                 ))}
             </ul>
           )}
+          <div ref={transcriptEndRef} />
         </div>
       )}
 

@@ -17,10 +17,16 @@ import type { TranscriptEntry } from "@/types/session";
  * context windows (Gemini, most OpenRouter models) just do more, smaller
  * requests — a performance cost, not a correctness one.
  */
-export const DEFAULT_CHUNK_CHAR_BUDGET = 1600;
+// Kept deliberately small (per user preference, confirmed by observation):
+// smaller chunks produce more focused, better-quality per-part responses
+// from smaller/free-tier models than large ones do — the tradeoff is more
+// requests (more latency, more chances to hit a rate limit on any single
+// provider), which the fallback chain + continuity context between parts
+// already exist to absorb.
+export const DEFAULT_CHUNK_CHAR_BUDGET = 500;
 
 /** How much of the end of one chunk gets carried into the next as continuity context. */
-export const CHUNK_OVERLAP_CHARS = 150;
+export const CHUNK_OVERLAP_CHARS = 100;
 
 export interface TranscriptChunk {
   text: string;

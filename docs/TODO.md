@@ -488,12 +488,43 @@ blank infinitely." Real bug, confirmed and fixed:
 21. Fix remaining issues — depends on 18-20
 22. Final verification and commits — depends on 18-21
 
+## Repo restructure + git history rewrite (2026-09-16)
+
+- Added `README.md` (root), `LICENSE` (MIT, with attribution for the bundled Apache-2.0
+  sherpa-onnx runtime), moved `TODO.md`/`prompt.md` into `docs/`, filled in `extension/package.json`
+  metadata (description/license/repository).
+- User asked to remove the `Co-Authored-By: Claude` trailer from **all** past commits, not just
+  future ones. Did a full history rewrite: `git filter-branch --msg-filter` (git-filter-repo wasn't
+  installed) stripping the trailer from all 14 commits, cleaned up the `refs/original/*` backup refs
+  + expired reflog + `git gc --prune=now` so old objects don't linger, then `git push --force`
+  (not `--force-with-lease` — that failed with "stale info" because the local rewrite had already
+  updated the local `origin/main` tracking ref, so the lease comparison had nothing meaningful left
+  to compare against; a plain force push was correct and safe here since this is a solo repo).
+  Verified zero remaining occurrences on the actual GitHub remote after pushing, not just locally.
+
+## Chunk size reduced further + transcript auto-scroll (user feedback, 2026-09-16)
+
+- User observation: **smaller AI chunks produce better per-part responses** from the smaller/
+  free-tier models this project targets. Reduced `DEFAULT_CHUNK_CHAR_BUDGET` in
+  `services/ai/chunking.ts` from 1600 → **500** chars (`CHUNK_OVERLAP_CHARS` 150 → 100
+  proportionally). Tradeoff, not yet independently re-verified: many more, smaller requests per
+  long recording — more latency and more chances for any single provider to hit a rate limit on a
+  given part, which the existing fallback chain + inter-part continuity context already exist to
+  absorb. If chunk count for a long recording seems excessive, this is the one constant to revisit.
+- User request: transcript should auto-scroll to the newest entry while recording, no manual
+  scrolling. Added a scroll anchor (`transcriptEndRef`) at the end of the Transcript tab's entry
+  list in `SessionDetail.tsx`, scrolled into view whenever `activeTranscript.length` changes —
+  gated to only fire while `session.status === "recording"` AND viewing the recorded (not YouTube)
+  transcript AND no Timeline-triggered jump-to-entry is pending, so it doesn't fight with someone
+  reading back a finished session from the top, or with the Timeline's jump-to-specific-entry
+  feature (both would be actively annoying if auto-scroll fired during them).
+
 ## Notes / gotchas for future sessions
 
-- `prompt.md` at project root is the full spec — re-read it if unsure of requirements.
-- Repo root (`Ai Automatic Note Tracker/`) is NOT a git repo yet; `stt-engine/` (nested) IS its own
-  git repo (has `.git`) — keep the extension's own git history separate, don't run git commands
-  from inside `stt-engine/` expecting them to affect the extension project.
+- `prompt.md` is now at `docs/prompt.md` — re-read it if unsure of requirements.
 - Do not copy `stt-engine/{bolo,bolo-core,bolo-gui,vendor,lib,target,.cargo,sherpa-onnx-alsa}` into
   the extension — only the model folder's contents are needed, and only 4 files from it
-  (encoder.onnx, decoder.onnx, joiner.onnx, tokens.txt).
+  (encoder.onnx, decoder.onnx, joiner.onnx, tokens.txt). `stt-engine/` itself was deleted from disk
+  once extraction was done and verified (it was gitignored/untracked, nothing lost).
+- Commits in this repo intentionally do **not** carry a `Co-Authored-By: Claude` trailer — the user
+  asked for it to be removed, including from all prior history (see above). Don't re-add it.
